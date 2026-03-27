@@ -15,10 +15,10 @@ def home():
 @bp.route("/register", methods=["GET", "POST"])
 def register():
     if request.method == "POST":
-        username = request.form.get("username").strip()
+        username = request.form.get("username", "").strip()
         password = request.form.get("password", "")
         password_confirm = request.form.get("password_confirm", "")
-        email = request.form.get("email", "")
+        email = request.form.get("email", "").strip()
         if password != password_confirm:
             flash("两次输入的密码不一致", "error")
             return render_template("register.html")
@@ -39,7 +39,7 @@ def register():
 @bp.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
-        username = request.form.get("username").strip()
+        username = request.form.get("username", "").strip()
         password = request.form.get("password", "")
         # 获取登录后重定向的目标页面(优先是读取表单，其次是读URL参数)
         next_url = request.form.get("next") or request.args.get("next")
@@ -69,3 +69,50 @@ def logout():
     session.clear()
     flash("已成功退出", "success")
     return redirect(url_for("auth.home"))
+
+
+@bp.route("/forgot-password", methods=["GET", "POST"])
+def forgot_password():
+    if request.method == "POST":
+        email = request.form.get("email", "").strip()
+        try:
+            user_service.request_password_reset_code(email)
+            flash("验证码已发送到邮箱，请查收", "success")
+            return redirect(url_for("auth.reset_password", email=email))
+        except ValueError as e:
+            logger.error(f"发送重置密码验证码失败: {str(e)}")
+            flash(str(e), "error")
+        except Exception as e:
+            logger.error(f"发送重置密码验证码失败: {str(e)}")
+            flash("发送失败，请稍后重试", "error")
+
+    return render_template("forgot_password.html")
+
+
+@bp.route("/reset-password", methods=["GET", "POST"])
+def reset_password():
+    if request.method == "POST":
+        email = request.form.get("email", "").strip()
+        code = request.form.get("code", "").strip()
+        password = request.form.get("password", "")
+        password_confirm = request.form.get("password_confirm", "")
+
+        if password != password_confirm:
+            flash("两次输入的密码不一致", "error")
+            return render_template("reset_password.html", email=email)
+
+        try:
+            user_service.reset_password_by_code(email, code, password)
+            flash("密码重置成功，请重新登录", "success")
+            return redirect(url_for("auth.login"))
+        except ValueError as e:
+            logger.error(f"重置密码失败: {str(e)}")
+            flash(str(e), "error")
+        except Exception as e:
+            logger.error(f"重置密码失败: {str(e)}")
+            flash("重置失败，请稍后重试", "error")
+
+        return render_template("reset_password.html", email=email)
+
+    email = request.args.get("email", "").strip()
+    return render_template("reset_password.html", email=email)

@@ -9,7 +9,7 @@ class TextSplitter:
             chunk_size=chunk_size,
             chunk_overlap=chunk_overlap,
             length_function=len,
-            separators=["\n\n", "\n", "。", "！", "？", ".", "!", "?", " ", ""],
+            separators=["\n\n", "\n", ". ", "? ", "! ", "。", "？", "！", " ", ""],
         )
 
     def split_documents(self, documents, doc_id):

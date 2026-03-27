@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}登录 - 智能问答系统{% endblock %}
+{% block title %}Login - Smart QA System{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -122,7 +122,7 @@
         <div class="auth-header">
             <h4>
                 <i class="bi bi-box-arrow-in-right me-2"></i>
-                用户登录
+                User Login
             </h4>
         </div>
         <div class="auth-body">
@@ -132,27 +132,30 @@
                 {% endif %}
 
                 <div class="mb-4">
-                    <label for="username" class="form-label">用户名</label>
+                    <label for="username" class="form-label">Username</label>
                     <input type="text" class="form-control" id="username" name="username" 
-                           placeholder="请输入用户名" required autofocus>
+                           placeholder="Enter username" required autofocus>
                 </div>
 
                 <div class="mb-4">
-                    <label for="password" class="form-label">密码</label>
+                    <label for="password" class="form-label">Password</label>
                     <input type="password" class="form-control" id="password" name="password" 
-                           placeholder="请输入密码" required>
+                           placeholder="Enter password" required>
+                    <div class="d-flex justify-content-end mt-2">
+                        <a href="{{ url_for('auth.forgot_password') }}">Forgot password?</a>
+                    </div>
                 </div>
 
                 <div class="d-grid gap-2">
                     <button type="submit" class="btn btn-primary">
                         <i class="bi bi-box-arrow-in-right me-2"></i>
-                        登录
+                        Login
                     </button>
                 </div>
             </form>
         </div>
         <div class="auth-footer">
-            <p class="mb-0">还没有账号？ <a href="{{ url_for('auth.register') }}">立即注册</a></p>
+            <p class="mb-0">No account yet? <a href="{{ url_for('auth.register') }}">Register now</a></p>
         </div>
     </div>
 </div>

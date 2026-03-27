@@ -59,6 +59,63 @@ class SettingsService(BaseService[Settings]):
         "rewrite_only_when_needed": True,
         "keyword_index_ttl_sec": 300,
     }
+    _PROMPT_DEFAULTS = {
+        "chat_system_prompt": (
+            "You are a rigorous assistant. Always answer in the same language as the user's latest question. "
+            "If the user asks in English, answer in English; if the user asks in Chinese, answer in Chinese."
+        ),
+        "rag_system_prompt": (
+            "You are a grounded QA assistant. You must only use the provided document context and never use outside knowledge. "
+            "Every key conclusion must include citation markers [^n]. Always answer in the same language as the user's latest question."
+        ),
+        "rag_query_prompt": (
+            "Document context:\n{context}\n\nUser question:\n{question}\n\nRequirements:\n"
+            "- Answer only from the document context.\n"
+            "- Add citation markers [^n] to each key conclusion (n maps to the source chunk index).\n"
+            "- If evidence is insufficient, clearly state that in the same language as the user's question."
+        ),
+    }
+    _LEGACY_CHAT_PROMPT_HINTS = (
+        "你是一个严谨的智能文档问答助手",
+        "你的唯一任务是根据用户提供的【参考文档】来回答问题",
+        "绝对忠实",
+    )
+    _LEGACY_RAG_SYSTEM_HINTS = (
+        "你是一个只允许基于检索文档作答的问答助手",
+        "每条关键结论后必须给出引用标记",
+        "必须原样回答：抱歉，当前检索到的文档中没有足够依据回答该问题",
+    )
+    _LEGACY_RAG_QUERY_HINTS = (
+        "【文档上下文】",
+        "【用户问题】",
+        "如果无法从文档直接得到答案，只输出：抱歉，当前检索到的文档中没有足够依据回答该问题",
+    )
+
+    @staticmethod
+    def _contains_any(text: str, hints: tuple[str, ...]) -> bool:
+        value = str(text or "")
+        return any(h in value for h in hints)
+
+    def _auto_migrate_legacy_prompts(self):
+        with self.transaction() as session:
+            settings = session.query(Settings).filter_by(id="global").first()
+            if not settings:
+                return
+            changed = False
+            chat_prompt = settings.chat_system_prompt or ""
+            if self._contains_any(chat_prompt, self._LEGACY_CHAT_PROMPT_HINTS):
+                settings.chat_system_prompt = self._PROMPT_DEFAULTS["chat_system_prompt"]
+                changed = True
+            rag_system_prompt = settings.rag_system_prompt or ""
+            if self._contains_any(rag_system_prompt, self._LEGACY_RAG_SYSTEM_HINTS):
+                settings.rag_system_prompt = self._PROMPT_DEFAULTS["rag_system_prompt"]
+                changed = True
+            rag_query_prompt = settings.rag_query_prompt or ""
+            if self._contains_any(rag_query_prompt, self._LEGACY_RAG_QUERY_HINTS):
+                settings.rag_query_prompt = self._PROMPT_DEFAULTS["rag_query_prompt"]
+                changed = True
+            if changed:
+                self.logger.info("Auto-migrated legacy Chinese prompt templates to multilingual defaults")
 
     @staticmethod
     def _normalize_provider_name(value: str) -> str:
@@ -259,6 +316,7 @@ class SettingsService(BaseService[Settings]):
         return payload
 
     def get(self):
+        self._auto_migrate_legacy_prompts()
         extra = self._read_extra_settings()
         with self.session() as session:
             settings = session.query(Settings).filter_by(id="global").first()
@@ -305,9 +363,9 @@ class SettingsService(BaseService[Settings]):
             "llm_api_key": Config.GEMINI_API_KEY,  # 配置里的默认 LLM API key
             "llm_base_url": Config.GEMINI_BASE_URL,  # 配置里的默认 LLM base url
             "llm_temperature": 0.7,  # 默认温度
-            "chat_system_prompt": "你是一个严谨的智能文档问答助手。你的唯一任务是根据用户提供的【参考文档】来回答问题。 请你严格遵守以下三条铁律： 1. 绝对忠实：你的回答必须 100% 来源于【参考文档】，绝对不允许使用你的预训练知识、常识或进行任何主观捏造。 2. 拒绝推测：如果【参考文档】中没有直接包含回答该问题所需的信息，你必须直接回答：“抱歉，当前的知识库文档中没有找到与该问题相关的信息。” 不允许尝试给出一半的答案。 3. 必须引用：在你回答的每一句结论后，必须加上引用的原话或文档来源。",  # 聊天系统默认提示词
-            "rag_system_prompt": "你是一个只允许基于检索文档作答的问答助手。你必须严格遵守：1) 只能使用提供的文档上下文，不得使用外部知识或常识补全；2) 每条关键结论后必须给出引用标记 [^n]；3) 若文档证据不足，必须原样回答：抱歉，当前检索到的文档中没有足够依据回答该问题。",  # RAG系统提示词
-            "rag_query_prompt": "【文档上下文】\n{context}\n\n【用户问题】\n{question}\n\n请按以下要求输出：\n- 仅基于“文档上下文”回答；\n- 每条关键结论后添加引用标记 [^n]（n 对应文档片段编号）；\n- 如果无法从文档直接得到答案，只输出：抱歉，当前检索到的文档中没有足够依据回答该问题。",  # RAG查询提示词
+            "chat_system_prompt": self._PROMPT_DEFAULTS["chat_system_prompt"],  # 聊天系统默认提示词
+            "rag_system_prompt": self._PROMPT_DEFAULTS["rag_system_prompt"],  # RAG系统提示词
+            "rag_query_prompt": self._PROMPT_DEFAULTS["rag_query_prompt"],  # RAG查询提示词
             # "retrieval_mode": "vector",  # 默认检索模式
             "retrieval_mode": "hybrid",  # 默认检索模式
             "vector_threshold": 0.2,  # 向量检索阈值

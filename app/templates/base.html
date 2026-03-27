@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}智能问答系统 - RAG 系统{% endblock %}</title>
+    <title>{% block title %}Smart QA System - RAG{% endblock %}</title>
 
     <!-- Google Fonts - Inter -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -743,9 +743,9 @@
                 <div class="sidebar-header-top">
                     <a href="/" class="sidebar-brand">
                         <i class="bi bi-book"></i>
-                        <span>智能问答系统</span>
+                        <span>Smart QA System</span>
                     </a>
-                    <button type="button" class="sidebar-toggle" id="baseSidebarToggle" aria-label="切换侧边栏" aria-expanded="true">
+                    <button type="button" class="sidebar-toggle" id="baseSidebarToggle" aria-label="Toggle sidebar" aria-expanded="true">
                         <i class="bi bi-layout-sidebar-inset"></i>
                     </button>
                 </div>
@@ -756,26 +756,26 @@
                     <li class="nav-item">
                         <a class="nav-link {% if request.endpoint == 'auth.home' %}active{% endif %}" href="/">
                             <i class="bi bi-house"></i>
-                            <span>首页</span>
+                            <span>Home</span>
                         </a>
                     </li>
                     {% if current_user %}
                     <li class="nav-item">
                         <a class="nav-link {% if request.endpoint == 'knowledgebase.kb_list' or request.endpoint == 'knowledgebase.kb_detail' %}active{% endif %}" href="/kb">
                             <i class="bi bi-database"></i>
-                            <span>知识库</span>
+                            <span>Knowledge Base</span>
                         </a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link {% if request.endpoint == 'chat.chat' %}active{% endif %}" href="/chat">
                             <i class="bi bi-chat-dots"></i>
-                            <span>聊天</span>
+                            <span>Chat</span>
                         </a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link {% if request.endpoint == 'settings.settings' %}active{% endif %}" href="/settings">
                             <i class="bi bi-gear"></i>
-                            <span>设置</span>
+                            <span>Settings</span>
                         </a>
                     </li>
                     {% endif %}
@@ -792,7 +792,7 @@
                         <div class="user-name">{{ current_user.username }}</div>
                         <div class="user-email">{{ current_user.email }}</div>
                     </div>
-                    <a href="{{ url_for('auth.logout') }}" class="logout-btn" title="登出">
+                    <a href="{{ url_for('auth.logout') }}" class="logout-btn" title="Logout">
                         <i class="bi bi-box-arrow-right"></i>
                     </a>
                 </div>
@@ -802,11 +802,11 @@
                 <div class="d-flex flex-column gap-2 px-4">
                     <a href="{{ url_for('auth.login') }}" class="btn btn-primary w-100">
                         <i class="bi bi-box-arrow-in-right"></i>
-                        <span>登录</span>
+                        <span>Login</span>
                     </a>
                     <a href="{{ url_for('auth.register') }}" class="btn btn-outline-primary w-100">
                         <i class="bi bi-person-plus"></i>
-                        <span>注册</span>
+                        <span>Register</span>
                     </a>
                 </div>
             </div>
@@ -859,7 +859,7 @@
                 sidebar.classList.toggle("collapsed", collapsed);
                 container.classList.toggle("sidebar-collapsed", collapsed);
                 toggleBtn.setAttribute("aria-expanded", collapsed ? "false" : "true");
-                toggleBtn.title = collapsed ? "展开侧边栏" : "收起侧边栏";
+                toggleBtn.title = collapsed ? "Expand sidebar" : "Collapse sidebar";
                 const icon = toggleBtn.querySelector("i");
                 if (icon) {
                     icon.className = collapsed

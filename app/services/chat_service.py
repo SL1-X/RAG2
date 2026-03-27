@@ -54,8 +54,17 @@ class ChatService:
         temperature = max(0.0, min(temperature, 2.0))
         chat_system_prompt = settings.get("chat_system_prompt")
         if not chat_system_prompt:
-            chat_system_prompt = "你是一个专业的AI助手。请友好、准确地回答用户的问题。"
-        messages = [("system", chat_system_prompt)]
+            chat_system_prompt = (
+                "You are a professional AI assistant. "
+                "Always reply in the same language as the user's latest question. "
+                "Be clear, accurate, and helpful."
+            )
+        language_guard = (
+            "Language policy: You MUST reply in the same language as the user's latest message. "
+            "If the user asks in English, reply in English. "
+            "Do not switch language unless the user explicitly asks you to."
+        )
+        messages = [("system", chat_system_prompt), ("system", language_guard)]
         messages.extend(self._normalize_history_messages(history))
         messages.append(("human", question))
         prompt = ChatPromptTemplate.from_messages(messages)

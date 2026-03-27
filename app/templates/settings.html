@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}设置 - 智能问答系统{% endblock %}
+{% block title %}Settings - Smart QA System{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -233,17 +233,17 @@
     <!-- 面包屑导航 -->
     <nav aria-label="breadcrumb" class="mb-4">
         <ol class="breadcrumb">
-            <li class="breadcrumb-item"><a href="/" class="text-decoration-none">首页</a></li>
-            <li class="breadcrumb-item active">设置</li>
+            <li class="breadcrumb-item"><a href="/" class="text-decoration-none">Home</a></li>
+            <li class="breadcrumb-item active">Settings</li>
         </ol>
     </nav>
 
     <!-- 页面标题 -->
     <h1 class="settings-title">
-        <i class="bi bi-gear me-2"></i> 系统设置
+        <i class="bi bi-gear me-2"></i> System Settings
     </h1>
-    <!-- <p class="settings-subtitle">配置模型、提示词和检索参数</p> -->
-    <p class="settings-subtitle">配置检索参数</p>
+    <!-- <p class="settings-subtitle">Configure model, prompts, and retrieval settings</p> -->
+    <p class="settings-subtitle">Configure retrieval parameters</p>
 
     <!-- 设置表单 -->
     <form id="settingsForm" onsubmit="saveSettings(event)">
@@ -253,25 +253,25 @@
                 <li class="nav-item" role="presentation">
                     <button class="nav-link" id="embedding-tab" data-bs-toggle="tab" data-bs-target="#embedding"
                         type="button" role="tab">
-                        <i class="bi bi-diagram-3"></i> 向量嵌入模型
+                        <i class="bi bi-diagram-3"></i> Embedding Model
                     </button>
                 </li>
                 <li class="nav-item" role="presentation">
                     <button class="nav-link" id="llm-tab" data-bs-toggle="tab" data-bs-target="#llm" type="button"
                         role="tab">
-                        <i class="bi bi-robot"></i> 大语言模型
+                        <i class="bi bi-robot"></i> LLM
                     </button>
                 </li>
                 <li class="nav-item" role="presentation">
                     <button class="nav-link" id="prompt-tab" data-bs-toggle="tab" data-bs-target="#prompt" type="button"
                         role="tab">
-                        <i class="bi bi-chat-quote"></i> 提示词设置
+                        <i class="bi bi-chat-quote"></i> Prompt Settings
                     </button>
                 </li>
                 <li class="nav-item" role="presentation">
                     <button class="nav-link active" id="retrieval-tab" data-bs-toggle="tab" data-bs-target="#retrieval"
                         type="button" role="tab">
-                        <i class="bi bi-search"></i> 检索设置
+                        <i class="bi bi-search"></i> Retrieval Settings
                     </button>
                 </li>
             </ul>
@@ -279,106 +279,106 @@
 
         <!-- 标签页内容 -->
         <div class="tab-content" id="settingsTabContent">
-            <!-- 标签1: 向量嵌入模型 -->
+            <!-- 标签1: Embedding Model -->
             <div class="tab-pane fade" id="embedding" role="tabpanel">
                 <div class="card settings-card">
                     <div class="card-header">
-                        <h5 class="mb-0"><i class="bi bi-diagram-3 me-2"></i> 向量嵌入模型（Embedding）</h5>
+                        <h5 class="mb-0"><i class="bi bi-diagram-3 me-2"></i> Embedding Model</h5>
                     </div>
                     <div class="card-body">
                         <div class="mb-4">
-                            <label class="form-label">提供商 <span class="text-danger">*</span></label>
+                            <label class="form-label">Provider <span class="text-danger">*</span></label>
                             <select class="form-select" id="embeddingProvider" name="embedding_provider"
                                 onchange="updateEmbeddingForm()" required>
                                 <option value="huggingface">HuggingFace</option>
                                 <option value="gemini">Gemini</option>
                                 <option value="ollama">Ollama</option>
                             </select>
-                            <div class="form-text">选择向量嵌入模型提供商</div>
+                            <div class="form-text">Select embedding model provider</div>
                         </div>
 
                         <div class="mb-4" id="embeddingModelNameGroup">
-                            <label class="form-label">模型名称</label>
+                            <label class="form-label">Model Name</label>
                             <select class="form-select" id="embeddingModelName" name="embedding_model_name">
-                                <option value="">请选择模型</option>
-                                <!-- 动态填充 -->
+                                <option value="">Please select a model</option>
+                                <!-- dynamic options -->
                             </select>
-                            <div class="form-text">选择模型名称或路径</div>
+                            <div class="form-text">Select a model name or local path</div>
                         </div>
 
                         <div class="mb-4" id="embeddingApiKeyGroup" style="display: none;">
                             <label class="form-label">API Key</label>
                             <input type="password" class="form-control" id="embeddingApiKey"
-                                name="embedding_api_key" placeholder="输入 API Key">
-                            <div class="form-text">某些提供商需要 API Key</div>
+                                name="embedding_api_key" placeholder="Enter API key">
+                            <div class="form-text">Some providers require an API key</div>
                         </div>
 
                         <div class="mb-4" id="embeddingBaseUrlGroup" style="display: none;">
                             <label class="form-label">Base URL</label>
                             <input type="text" class="form-control" id="embeddingBaseUrl" name="embedding_base_url"
-                                placeholder="例如: http://localhost:11434">
-                            <div class="form-text">API Base URL（Ollama 需要）</div>
+                                placeholder="e.g.: http://localhost:11434">
+                            <div class="form-text">API Base URL (required for Ollama)</div>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- 标签2: 大语言模型 -->
+            <!-- 标签2: LLM -->
             <div class="tab-pane fade" id="llm" role="tabpanel">
                 <div class="card settings-card">
                     <div class="card-header">
-                        <h5 class="mb-0"><i class="bi bi-robot me-2"></i> 大语言模型（LLM）</h5>
+                        <h5 class="mb-0"><i class="bi bi-robot me-2"></i> LLM（LLM）</h5>
                     </div>
                     <div class="card-body">
                         <div class="mb-4">
-                            <label class="form-label">提供商 <span class="text-danger">*</span></label>
+                            <label class="form-label">Provider <span class="text-danger">*</span></label>
                             <select class="form-select" id="llmProvider" name="llm_provider"
                                 onchange="updateLLMForm()" required>
                                 <option value="deepseek">DeepSeek</option>
                                 <option value="gemini">Gemini</option>
                                 <option value="ollama">Ollama</option>
                             </select>
-                            <div class="form-text">选择大语言模型提供商</div>
+                            <div class="form-text">Select LLM provider</div>
                         </div>
 
                         <div class="mb-4" id="llmModelNameGroup">
-                            <label class="form-label">模型名称</label>
+                            <label class="form-label">Model Name</label>
                             <select class="form-select" id="llmModelName" name="llm_model_name">
-                                <option value="1" selected>请选择模型</option>
+                                <option value="1" selected>Please select a model</option>
                                 <!-- 动态填充 -->
                             </select>
-                            <div class="form-text">选择模型名称</div>
+                            <div class="form-text">Select model name</div>
                         </div>
 
                         <div class="mb-4" id="llmApiKeyGroup">
                             <label class="form-label">API Key</label>
                             <input type="password" class="form-control" id="llmApiKey" name="llm_api_key"
-                                placeholder="输入 API Key">
-                            <div class="form-text">某些提供商需要 API Key</div>
+                                placeholder="Enter API key">
+                            <div class="form-text">Some providers require an API key</div>
                         </div>
 
                         <div class="mb-4" id="llmBaseUrlGroup">
                             <label class="form-label">Base URL</label>
                             <input type="text" class="form-control" id="llmBaseUrl" name="llm_base_url"
-                                placeholder="例如: https://api.deepseek.com">
+                                placeholder="e.g.: https://api.deepseek.com">
                             <div class="form-text">API Base URL</div>
                         </div>
 
                         <div class="mb-4">
-                            <label class="form-label">温度 (Temperature)</label>
+                            <label class="form-label">Temperature</label>
                             <input type="number" class="form-control" id="llmTemperature" name="llm_temperature"
                                 value="0.7" step="0.1" min="0" max="2" placeholder="0.7">
-                            <div class="form-text">控制输出的随机性，值越大越随机（0-2）</div>
+                            <div class="form-text">Controls output randomness. Higher values are more random (0-2).</div>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- 标签3: 提示词设置 -->
+            <!-- 标签3: Prompt Settings -->
             <div class="tab-pane fade" id="prompt" role="tabpanel">
                 <div class="card settings-card">
                     <div class="card-header">
-                        <h5 class="mb-0"><i class="bi bi-chat-quote me-2"></i> 提示词设置</h5>
+                        <h5 class="mb-0"><i class="bi bi-chat-quote me-2"></i> Prompt Settings</h5>
                     </div>
                     <div class="card-body">
                         <!-- 子标签页导航 -->
@@ -387,13 +387,13 @@
                                 <li class="nav-item" role="presentation">
                                     <button class="nav-link active" id="chat-prompt-sub-tab" data-bs-toggle="tab"
                                         data-bs-target="#chat-prompt-sub" type="button" role="tab">
-                                        <i class="bi bi-chat"></i> 普通聊天提示词
+                                        <i class="bi bi-chat"></i> General Chat Prompt
                                     </button>
                                 </li>
                                 <li class="nav-item" role="presentation">
                                     <button class="nav-link" id="rag-prompt-sub-tab" data-bs-toggle="tab"
                                         data-bs-target="#rag-prompt-sub" type="button" role="tab">
-                                        <i class="bi bi-book"></i> 知识库聊天提示词
+                                        <i class="bi bi-book"></i> Knowledge Base Prompt
                                     </button>
                                 </li>
                             </ul>
@@ -401,45 +401,45 @@
 
                         <!-- 子标签页内容 -->
                         <div class="tab-content" id="promptSubTabContent">
-                            <!-- 子标签1: 普通聊天提示词 -->
+                            <!-- 子标签1: General Chat Prompt -->
                             <div class="tab-pane fade show active" id="chat-prompt-sub" role="tabpanel">
                                 <div class="mb-4">
-                                    <label class="form-label">普通聊天系统提示词</label>
+                                    <label class="form-label">General Chat System Prompt</label>
                                     <textarea class="form-control" id="chatSystemPrompt" name="chat_system_prompt"
-                                        rows="10" placeholder="输入普通聊天提示词..."></textarea>
+                                        rows="10" placeholder="Enter general chat prompt..."></textarea>
                                     <div class="form-text mt-2">
-                                        <p class="mb-0">普通聊天提示词用于指导AI助手在普通聊天（未选择知识库）时的回答风格和行为。</p>
-                                        <p class="mb-0 mt-2"><strong>注意：</strong>这是系统消息的内容，不能使用变量。</p>
+                                        <p class="mb-0">Used to guide assistant behavior and style in normal chat (without a selected knowledge base).</p>
+                                        <p class="mb-0 mt-2"><strong>Note:</strong> This is system-message content and cannot use variables.</p>
                                     </div>
                                 </div>
                             </div>
 
-                            <!-- 子标签2: 知识库聊天提示词 -->
+                            <!-- 子标签2: Knowledge Base Prompt -->
                             <div class="tab-pane fade" id="rag-prompt-sub" role="tabpanel">
                                 <div class="mb-4">
-                                    <label class="form-label">知识库聊天系统提示词</label>
+                                    <label class="form-label">Knowledge Base System Prompt</label>
                                     <textarea class="form-control" id="ragSystemPrompt" name="rag_system_prompt"
-                                        rows="6" placeholder="输入知识库聊天系统提示词..."></textarea>
+                                        rows="6" placeholder="Enter knowledge base system prompt..."></textarea>
                                     <div class="form-text mt-2">
-                                        <p class="mb-0">知识库聊天系统提示词用于在会话开始时设置AI助手的角色和行为。</p>
-                                        <p class="mb-0 mt-2"><strong>注意：</strong>这是系统消息的内容，不能使用变量（如 {context} 或
-                                            {question}）。</p>
+                                        <p class="mb-0">Used to define assistant role and behavior at the start of a KB conversation.</p>
+                                        <p class="mb-0 mt-2"><strong>Note:</strong> This is system-message content and cannot use variables (such as {context} or
+                                            {question}).</p>
                                     </div>
                                 </div>
 
                                 <hr class="my-4">
 
                                 <div class="mb-4">
-                                    <label class="form-label">知识库聊天查询提示词</label>
+                                    <label class="form-label">Knowledge Base Query Prompt</label>
                                     <textarea class="form-control" id="ragQueryPrompt" name="rag_query_prompt"
                                         rows="10"
-                                        placeholder="例如：文档内容：&#10;{context}&#10;&#10;问题：{question}&#10;&#10;请基于文档内容回答问题。如果文档中没有相关信息，请明确说明。"></textarea>
+                                        placeholder="Example: Document context:&#10;{context}&#10;&#10;Question:{question}&#10;&#10;Answer based on document context. If information is missing, state that clearly."></textarea>
                                     <div class="form-text mt-2">
-                                        <p class="mb-1">知识库聊天查询提示词用于每次提问时构建提示，指导AI助手如何基于文档内容回答问题。</p>
-                                        <p class="mb-0"><strong>必须使用以下变量：</strong></p>
+                                        <p class="mb-1">Used on each query to build the runtime prompt for grounded responses.</p>
+                                        <p class="mb-0"><strong>You must include these variables:</strong></p>
                                         <ul class="mb-0">
-                                            <li><code>{context}</code> - 检索到的文档内容（必需）</li>
-                                            <li><code>{question}</code> - 用户的问题（必需）</li>
+                                            <li><code>{context}</code> - Retrieved document context (required)</li>
+                                            <li><code>{question}</code> - User question (required)</li>
                                         </ul>
                                     </div>
                                 </div>
@@ -449,74 +449,74 @@
                 </div>
             </div>
 
-            <!-- 标签4: 检索设置 -->
+            <!-- 标签4: Retrieval Settings -->
             <div class="tab-pane fade show active" id="retrieval" role="tabpanel">
                 <div class="card settings-card">
                     <div class="card-header">
-                        <h5 class="mb-0"><i class="bi bi-search me-2"></i> 检索设置</h5>
+                        <h5 class="mb-0"><i class="bi bi-search me-2"></i> Retrieval Settings</h5>
                     </div>
                     <div class="card-body">
                         <div class="mb-4">
-                            <label class="form-label">检索模式 <span class="text-danger">*</span></label>
+                            <label class="form-label">Retrieval mode <span class="text-danger">*</span></label>
                             <select class="form-select" id="retrievalMode" name="retrieval_mode"
                                 onchange="updateRetrievalForm()" required>
-                                <option value="vector">向量检索</option>
-                                <option value="keyword">全文检索</option>
-                                <option value="hybrid">混合检索</option>
+                                <option value="vector">Vector Retrieval</option>
+                                <option value="keyword">Keyword Retrieval</option>
+                                <option value="hybrid">Hybrid Retrieval</option>
                             </select>
-                            <div class="form-text">选择文档检索方式</div>
+                            <div class="form-text">Choose retrieval strategy</div>
                         </div>
 
                         <div class="mb-4" id="vectorThresholdGroup">
-                            <label class="form-label">向量检索阈值</label>
+                            <label class="form-label">Vector Threshold</label>
                             <input type="number" class="form-control" id="vectorThreshold" name="vector_threshold"
                                 value="0.2" step="0.1" min="0" max="1" placeholder="0.2">
-                            <div class="form-text">向量相似度阈值，低于此值的文档将被过滤（0-1）</div>
+                            <div class="form-text">Vector similarity threshold. Documents below this are filtered (0-1).</div>
                         </div>
 
                         <div class="mb-4" id="keywordThresholdGroup" style="display: none;">
-                            <label class="form-label">全文检索阈值</label>
+                            <label class="form-label">Keyword Threshold</label>
                             <input type="number" class="form-control" id="keywordThreshold" name="keyword_threshold"
                                 value="0.5" step="0.1" min="0" max="1" placeholder="0.5">
-                            <div class="form-text">关键词匹配阈值（0-1）</div>
+                            <div class="form-text">Keyword match threshold (0-1).</div>
                         </div>
 
                         <div class="mb-4" id="vectorWeightGroup" style="display: none;">
-                            <label class="form-label">向量检索权重</label>
+                            <label class="form-label">Vector Weight</label>
                             <input type="number" class="form-control" id="vectorWeight" name="vector_weight"
                                 value="0.7" step="0.1" min="0" max="1" placeholder="0.7">
-                            <div class="form-text">混合检索时向量检索的权重（0-1），关键词检索权重 = 1 - 向量权重</div>
+                            <div class="form-text">Weight of vector retrieval in hybrid mode (0-1); keyword weight = 1 - vector weight.</div>
                         </div>
 
                         <div class="mb-4">
-                            <label class="form-label">TopK 结果数量</label>
+                            <label class="form-label">TopK result count</label>
                             <input type="number" class="form-control" id="topK" name="top_k" value="5" min="1"
                                 max="50" placeholder="5">
-                            <div class="form-text">返回的文档数量（1-50）</div>
+                            <div class="form-text">Number of returned documents (1-50).</div>
                         </div>
 
                         <div class="mb-4">
-                            <label class="form-label d-block">重排序开关</label>
+                            <label class="form-label d-block">Rerank switch</label>
                             <div class="form-check form-switch">
                                 <input class="form-check-input" type="checkbox" id="useRerank" name="use_rerank" checked>
-                                <label class="form-check-label" for="useRerank">启用重排序（推荐开启）</label>
+                                <label class="form-check-label" for="useRerank">Enable reranking (recommended)</label>
                             </div>
-                            <div class="form-text">开启后会对候选片段做语义重排，通常能提升相关性</div>
+                            <div class="form-text">When enabled, candidate chunks are semantically reranked to improve relevance.</div>
                         </div>
 
                         <div class="mb-4">
-                            <label class="form-label">重排候选数量</label>
+                            <label class="form-label">Rerank candidate count</label>
                             <input type="number" class="form-control" id="rerankCandidateK" name="rerank_candidate_k" value="24" min="5"
                                 max="200" placeholder="24">
-                            <div class="form-text">进入重排模型的候选片段数量（越大越准但越慢，建议 16-48）</div>
+                            <div class="form-text">Number of candidate chunks passed to reranker (higher is better but slower, recommended 16-48).</div>
                         </div>
 
                         <div class="alert alert-info">
-                            <i class="bi bi-info-circle me-2"></i> <strong>说明：</strong>
+                            <i class="bi bi-info-circle me-2"></i> <strong>Notes:</strong>
                             <ul class="mb-0 mt-2">
-                                <li><strong>向量检索：</strong>基于语义相似度检索，适合理解问题意图</li>
-                                <li><strong>全文检索：</strong>基于关键词匹配检索，适合精确匹配</li>
-                                <li><strong>混合检索：</strong>结合向量和关键词检索，综合两者的优势</li>
+                                <li><strong>Vector Retrieval:</strong> Semantic retrieval, better for intent understanding.</li>
+                                <li><strong>Keyword Retrieval:</strong> Keyword matching, better for exact matches.</li>
+                                <li><strong>Hybrid Retrieval:</strong> Combines vector and keyword retrieval for balanced performance.</li>
                             </ul>
                         </div>
                     </div>
@@ -527,10 +527,10 @@
         <!-- 操作按钮 -->
         <div class="d-flex justify-content-end gap-3 mt-4">
             <button type="button" class="btn btn-secondary" onclick="resetSettings()">
-                <i class="bi bi-arrow-counterclockwise me-2"></i> 重置
+                <i class="bi bi-arrow-counterclockwise me-2"></i> Reset
             </button>
             <button type="submit" class="btn btn-primary">
-                <i class="bi bi-save me-2"></i> 保存设置
+                <i class="bi bi-save me-2"></i> Save Settings
             </button>
         </div>
     </form>
@@ -547,14 +547,14 @@
         const baseUrlGroup = document.getElementById('embeddingBaseUrlGroup')
         //先记住当前选中的模型
         const currentValue = modelSelect.value
-        modelSelect.innerHTML = '<option value="">请选择模型</options>'
+        modelSelect.innerHTML = '<option value="">Please select a model</options>'
         if (availableModels && availableModels.embedding_models[provider]) {
             const providerInfo = availableModels.embedding_models[provider]
             providerInfo.models.forEach(model => {
                 const option = document.createElement('option')
                 const optionValue = model.path || model.name
                 option.value = optionValue
-                const displayText = model.name + (model.dimension ? `(维度:${model.dimension})` : "")
+                const displayText = model.name + (model.dimension ? `(dim:${model.dimension})` : "")
                 option.textContent = displayText
                 modelSelect.appendChild(option)
             })
@@ -584,7 +584,7 @@
         const baseUrlGroup = document.getElementById('llmBaseUrlGroup')
         //先记住当前选中的模型
         const currentValue = modelSelect.value
-        modelSelect.innerHTML = '<option value="">请选择模型</options>'
+        modelSelect.innerHTML = '<option value="">Please select a model</options>'
         if (availableModels && availableModels.llm_models[provider]) {
             const providerInfo = availableModels.llm_models[provider]
             providerInfo.models.forEach(model => {
@@ -615,14 +615,14 @@
         }
     }
     function loadSettings(settings) {
-        // 向量嵌入模型：先设置提供商和模型名称，然后更新表单
+        // Embedding Model：先设置Provider和Model Name，然后更新表单
         document.getElementById('embeddingProvider').value = settings.embedding_provider
         document.getElementById('embeddingModelName').value = settings.embedding_model_name || ''
         updateEmbeddingForm() // 更新模型列表和显示/隐藏字段（会尝试恢复之前的值）
         document.getElementById('embeddingApiKey').value = settings.embedding_api_key || ''
         document.getElementById('embeddingBaseUrl').value = settings.embedding_base_url || ''
 
-        // 大语言模型：先设置提供商和模型名称，然后更新表单
+        // LLM：先设置Provider和Model Name，然后更新表单
         document.getElementById('llmProvider').value = settings.llm_provider
         document.getElementById('llmModelName').value = settings.llm_model_name || ''
         updateLLMForm() // 更新模型列表和显示/隐藏字段（会尝试恢复之前的值）
@@ -641,7 +641,7 @@
         document.getElementById('topK').value = settings.top_k || '5'
         document.getElementById('useRerank').checked = settings.use_rerank !== false
         document.getElementById('rerankCandidateK').value = settings.rerank_candidate_k || '24'
-        updateRetrievalForm() // 更新检索模式的显示/隐藏
+        updateRetrievalForm() // 更新Retrieval mode的显示/隐藏
     }
     document.addEventListener('DOMContentLoaded', async function () {
         try {
@@ -660,11 +660,11 @@
 
             }
         } catch (error) {
-            alert("加载设置失败:" + error.message)
+            alert("Failed to load settings:" + error.message)
         }
     })
     function resetSettings() {
-        if (confirm('确定要重置为默认设置吗？')) {
+        if (confirm('Reset to default settings?')) {
             loadSettings({
                 embedding_provider: 'huggingface',
                 embedding_model_name: 'sentence-transformers/all-MiniLM-L6-v2',
@@ -675,9 +675,9 @@
                 llm_api_key: '',
                 llm_base_url: 'https://generativelanguage.googleapis.com',
                 llm_temperature: 0.7,
-                chat_system_prompt: '你是一个专业的AI助手。请友好、准确地回答用户的问题。',
-                rag_system_prompt: '你是一个专业的AI助手。请基于文档内容回答问题。',
-                rag_query_prompt: '文档内容：\n{context}\n\n问题：{question}\n\n请基于文档内容回答问题。如果文档中没有相关信息，请明确说明。',
+                chat_system_prompt: 'You are a professional AI assistant. Always answer in the same language as the user\'s latest question. Be clear, accurate, and helpful.',
+                rag_system_prompt: 'You are a grounded QA assistant. Use only the provided document context. Every key conclusion must include citations [^n]. Always answer in the same language as the user\'s latest question.',
+                rag_query_prompt: 'Document context:\n{context}\n\nUser question:\n{question}\n\nRequirements:\n- Answer only from the document context.\n- Add citation markers [^n] to key conclusions.\n- If evidence is insufficient, clearly state that in the same language as the user question.',
                 retrieval_mode: 'vector',
                 vector_threshold: 0.2,
                 keyword_threshold: 0.2,
@@ -721,13 +721,13 @@
             })
             const result = await response.json()
             if (response.ok) {
-                alert("保存设置成功")
+                alert("Settings saved successfully")
                 location.reload()
             } else {
-                alert("保存失败:" + result.message)
+                alert("Save failed:" + result.message)
             }
         } catch (error) {
-            alert("保存设置失败:" + error.message)
+            alert("Failed to save settings:" + error.message)
         }
     }
     function updateRetrievalForm() {
@@ -737,17 +737,17 @@
         const vectorWeightGroup = document.getElementById('vectorWeightGroup')
 
         if (retrievalMode === 'vector') {
-            // 向量检索：只显示向量检索阈值
+            // Vector Retrieval：只显示Vector Retrieval阈值
             vectorThresholdGroup.style.display = 'block'
             keywordThresholdGroup.style.display = 'none'
             vectorWeightGroup.style.display = 'none'
         } else if (retrievalMode === 'keyword') {
-            // 全文检索：只显示全文检索阈值
+            // Keyword Retrieval：只显示Keyword Retrieval阈值
             vectorThresholdGroup.style.display = 'none'
             keywordThresholdGroup.style.display = 'block'
             vectorWeightGroup.style.display = 'none'
         } else if (retrievalMode === 'hybrid') {
-            // 混合检索：显示向量检索阈值、全文检索阈值和向量检索权重
+            // Hybrid Retrieval：显示Vector Retrieval阈值、Keyword Retrieval阈值和Vector Retrieval权重
             vectorThresholdGroup.style.display = 'block'
             keywordThresholdGroup.style.display = 'block'
             vectorWeightGroup.style.display = 'block'

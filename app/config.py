@@ -48,6 +48,16 @@ class Config:
     DB_NAME = os.environ.get("DB_NAME", "rag")
     DB_CHARSET = os.environ.get("DB_CHARSET", "utf8mb4")
 
+    # 邮件服务配置（用于找回密码验证码）
+    SMTP_HOST = os.environ.get("SMTP_HOST", "")
+    SMTP_PORT = int(os.environ.get("SMTP_PORT", 587))
+    SMTP_USER = os.environ.get("SMTP_USER", "")
+    SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "")
+    SMTP_USE_TLS = os.environ.get("SMTP_USE_TLS", "true").lower() == "true"
+    SMTP_USE_SSL = os.environ.get("SMTP_USE_SSL", "false").lower() == "true"
+    SMTP_FROM = os.environ.get("SMTP_FROM", "")
+    SMTP_TIMEOUT = int(os.environ.get("SMTP_TIMEOUT", 10))
+
     # 存储的类型
     STORAGE_TYPE = os.environ.get("STORAGE_TYPE", "local")  # local / minio
     # 本地文件的存储目录

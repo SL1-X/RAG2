@@ -1,26 +1,26 @@
-{% extends "base.html" %} {% block title %}智能问答系统{% endblock %} {% block header_title %}智能问答{% endblock %} {% block header_actions %}
+{% extends "base.html" %} {% block title %}Smart QA System{% endblock %} {% block header_title %}Chat{% endblock %} {% block header_actions %}
 <div class="chat-toolbar d-flex flex-wrap align-items-center gap-2 gap-md-3">
     <div class="d-flex align-items-center gap-2">
-        <label class="chat-toolbar-label mb-0 text-nowrap" for="kbSelect">知识库</label>
+        <label class="chat-toolbar-label mb-0 text-nowrap" for="kbSelect">Knowledge Base</label>
         <select class="form-select form-select-sm chat-toolbar-select" id="kbSelect" onchange="onKbChange()">
-            <option value="">不绑定（普通对话）</option>
+            <option value="">No binding (general chat)</option>
             {% for kb in knowledgebases %}
             <option value="{{ kb.id }}">{{ kb.name }}</option>
             {% endfor %}
         </select>
     </div>
     <div class="d-flex align-items-center gap-2" id="pipelineToolbarGroup" style="display: none">
-        <label class="chat-toolbar-label mb-0 text-nowrap" for="pipelineModeSelect">模式</label>
+        <label class="chat-toolbar-label mb-0 text-nowrap" for="pipelineModeSelect">Mode</label>
         <select
             class="form-select form-select-sm chat-toolbar-select chat-toolbar-select-wide"
             id="pipelineModeSelect"
-            title="知识库问答：检索与生成策略"
+            title="Knowledge base QA: retrieval and generation strategy"
             onchange="updatePipelineUi()"
         >
-            <option value="vector_generate">向量检索生成</option>
-            <option value="keyword_generate">关键词检索生成</option>
-            <option value="hybrid_generate">混合检索生成</option>
-            <option value="triple_parallel">三路同时</option>
+            <option value="vector_generate">Vector Retrieval + Generation</option>
+            <option value="keyword_generate">Keyword Retrieval + Generation</option>
+            <option value="hybrid_generate">Hybrid Retrieval + Generation</option>
+            <option value="triple_parallel">Triple Parallel</option>
         </select>
     </div>
 </div>
@@ -46,7 +46,6 @@
         min-width: 200px;
         max-width: 14rem;
     }
-
     .chat-container {
         height: calc(100vh - 65px);
         display: flex;
@@ -342,6 +341,34 @@
     .chat-question .chat-role-badge {
         color: rgba(255, 255, 255, 0.9);
     }
+    .chat-mode-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.26rem;
+        font-size: 0.68rem;
+        line-height: 1.2;
+        font-weight: 700;
+        border-radius: 999px;
+        padding: 0.18rem 0.48rem;
+        border: 1px solid #dbe3ee;
+        background: #f8fafc;
+        color: #475569;
+    }
+    .chat-mode-badge.mode-vector {
+        border-color: #bfdbfe;
+        background: #eff6ff;
+        color: #1d4ed8;
+    }
+    .chat-mode-badge.mode-keyword {
+        border-color: #bbf7d0;
+        background: #f0fdf4;
+        color: #15803d;
+    }
+    .chat-mode-badge.mode-hybrid {
+        border-color: #a5f3fc;
+        background: #ecfeff;
+        color: #0e7490;
+    }
 
     .chat-answer-body {
         margin-top: 0.7rem;
@@ -372,6 +399,25 @@
         border-radius: 8px;
         padding: 0.75rem;
         border: 1px solid #e2e8f0;
+    }
+
+    .streaming-content {
+        white-space: pre-wrap;
+        word-break: break-word;
+        line-height: 1.68;
+    }
+    .streaming-cursor {
+        display: inline-block;
+        width: 0.45rem;
+        margin-left: 0.08rem;
+        border-left: 2px solid #334155;
+        vertical-align: -0.08em;
+        animation: chatCursorBlink 1s steps(1, end) infinite;
+    }
+    @keyframes chatCursorBlink {
+        50% {
+            opacity: 0;
+        }
     }
 
     .answer-triple-grid {
@@ -638,6 +684,95 @@
         box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.35), 0 4px 14px rgba(245, 158, 11, 0.12);
     }
 
+    .chat-recommend-wrap {
+        margin-top: 0.45rem;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        background: #f8fafc;
+        padding: 0.45rem 0.5rem 0.5rem;
+    }
+    .chat-recommend-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.5rem;
+    }
+    .chat-recommend-label {
+        font-size: 0.74rem;
+        font-weight: 700;
+        color: #475569;
+        line-height: 1.2;
+    }
+    .chat-recommend-actions {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3rem;
+    }
+    .chat-recommend-btn {
+        border: 1px solid #dbe3ee;
+        background: #fff;
+        color: #475569;
+        border-radius: 8px;
+        font-size: 0.7rem;
+        font-weight: 700;
+        padding: 0.12rem 0.42rem;
+        line-height: 1.25;
+    }
+    .chat-recommend-btn:hover {
+        background: #f1f5f9;
+    }
+    .chat-recommend-btn:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+    }
+    .chat-recommend-viewport {
+        margin-top: 0.42rem;
+        overflow-x: auto;
+        overflow-y: hidden;
+        scrollbar-width: thin;
+    }
+    .chat-recommend-list {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.44rem;
+        min-width: max-content;
+        padding-bottom: 0.05rem;
+    }
+    .chat-recommend-chip {
+        border: 1px solid #cbd5e1;
+        background: #eef2ff;
+        color: #334155;
+        border-radius: 999px;
+        font-size: 0.72rem;
+        line-height: 1.25;
+        font-weight: 600;
+        padding: 0.34rem 0.62rem;
+        white-space: nowrap;
+        max-width: min(60vw, 520px);
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .chat-recommend-chip:hover {
+        background: #e0e7ff;
+        border-color: #93c5fd;
+    }
+    .chat-recommend-wrap.is-collapsed .chat-recommend-viewport {
+        display: none;
+    }
+    .chat-recommend-wrap.is-expanded .chat-recommend-viewport {
+        max-height: 132px;
+        overflow-y: auto;
+    }
+    .chat-recommend-wrap.is-expanded .chat-recommend-list {
+        display: flex;
+        flex-wrap: wrap;
+        min-width: 100%;
+    }
+    .chat-recommend-wrap.is-expanded .chat-recommend-chip {
+        white-space: normal;
+        max-width: 100%;
+    }
+
     .chat-sidebar .btn {
         border-radius: 8px;
         font-weight: 600;
@@ -690,6 +825,9 @@
         .chat-input-area {
             padding: 0.72rem 0.9rem 0.92rem;
         }
+        .chat-recommend-chip {
+            max-width: min(72vw, 420px);
+        }
 
         .answer-triple-grid {
             grid-template-columns: 1fr;
@@ -709,72 +847,72 @@
 </style>
 {% endblock %} {% block content %}
 <div class="chat-container">
-    <!-- 左侧：会话（默认窄条，可收起为图标栏） -->
-    <aside class="chat-sidebar" id="chatSidebar" aria-label="会话列表">
+    <!-- 左侧：会话（默认窄条，可Collapse为图标栏） -->
+    <aside class="chat-sidebar" id="chatSidebar" aria-label="Session list">
         <div class="chat-sidebar-header">
             <div class="chat-sidebar-toolbar">
                 <button
                     type="button"
                     class="btn btn-sm btn-light border"
                     id="sidebarToggleBtn"
-                    title="收起侧边栏"
+                    title="Collapse sidebar"
                     aria-expanded="true"
                     aria-controls="sessionList"
                 >
                     <i class="bi bi-chevron-double-left" aria-hidden="true"></i>
                 </button>
-                <button class="btn btn-sm btn-primary" type="button" onclick="createNewSession()" title="新建会话">
+                <button class="btn btn-sm btn-primary" type="button" onclick="createNewSession()" title="New session">
                     <i class="bi bi-plus-lg"></i>
                 </button>
-                <button class="btn btn-sm btn-outline-danger" type="button" onclick="clearAllSessions()" title="清空全部会话">
+                <button class="btn btn-sm btn-outline-danger" type="button" onclick="clearAllSessions()" title="Clear all sessions">
                     <i class="bi bi-trash"></i>
                 </button>
             </div>
-            <div class="chat-sidebar-subtitle">会话</div>
+            <div class="chat-sidebar-subtitle">Sessions</div>
         </div>
         <div class="session-list" id="sessionList">
             <div class="text-center text-muted py-4">
                 <i class="bi bi-chat-left-text" style="font-size: 1.75rem"></i>
-                <p class="mt-2 small mb-0">暂无会话</p>
+                <p class="mt-2 small mb-0">No sessions yet</p>
             </div>
         </div>
     </aside>
 
-    <!-- 右侧：对话（主区域） -->
+    <!-- 右侧：Conversation（主区域） -->
     <div class="chat-main">
         <div class="chat-main-header">
-            <h6 class="chat-main-title mb-0"><i class="bi bi-chat-dots text-primary"></i> 对话</h6>
+            <h6 class="chat-main-title mb-0"><i class="bi bi-chat-dots text-primary"></i> Conversation</h6>
             <p class="chat-main-subtitle mt-1 mb-0">
-                在顶部选择知识库和模式后，直接在下方输入问题即可开始。
+                Select a knowledge base and mode above, then enter your question below to start.
             </p>
         </div>
 
         <div class="chat-messages" id="chatMessages">
             <div class="empty-state">
                 <i class="bi bi-chat-left-text" style="font-size: 2.75rem"></i>
-                <p class="mt-2 small">还没有消息，输入一个明确问题开始对话</p>
+                <p class="mt-2 small">No messages yet. Enter a clear question to begin.</p>
             </div>
         </div>
 
         <div class="chat-input-area">
             <form id="chatForm" onsubmit="askQuestion(event)">
                 <div class="mb-2" id="ragContextWrap" style="display: none">
-                    <div class="chat-input-label">文档上下文</div>
-                    <p class="small text-muted mb-1">仅在「仅生成」模式下使用，不触发向量库检索</p>
+                    <div class="chat-input-label">Document Context</div>
+                    <p class="small text-muted mb-1">Used only in Generate-only mode. No vector retrieval is triggered.</p>
                     <textarea
                         class="form-control form-control-sm"
                         id="ragContextInput"
                         rows="3"
-                        placeholder="粘贴或编辑要作为依据的正文…"
+                        placeholder="Paste or edit reference text here..."
                     ></textarea>
                 </div>
                 <div class="mb-2">
-                    <div class="chat-input-label">输入问题</div>
+                    <div class="chat-input-label">Question</div>
                     <textarea
                         class="form-control"
                         id="questionInput"
                         rows="3"
-                        placeholder="例如：请总结该知识库中关于检索策略的最佳实践"
+                        placeholder="Example: Summarize best practices for retrieval strategy in this knowledge base."
                         required
                         onkeydown="
                             if (event.key === 'Enter' && !event.shiftKey) {
@@ -783,10 +921,27 @@
                             }
                         "
                     ></textarea>
+                    <div class="chat-recommend-wrap is-collapsed" id="recommendedQuestionsWrap">
+                        <div class="chat-recommend-head">
+                            <div class="chat-recommend-label" id="recommendedQuestionsLabel">Recommended questions</div>
+                            <div class="chat-recommend-actions">
+                                <button type="button" class="chat-recommend-btn" id="recommendedPrevBtn" title="Previous">
+                                    <i class="bi bi-chevron-left"></i>
+                                </button>
+                                <button type="button" class="chat-recommend-btn" id="recommendedNextBtn" title="Next">
+                                    <i class="bi bi-chevron-right"></i>
+                                </button>
+                                <button type="button" class="chat-recommend-btn" id="recommendedToggleBtn">Expand</button>
+                            </div>
+                        </div>
+                        <div class="chat-recommend-viewport" id="recommendedQuestionsViewport">
+                            <div class="chat-recommend-list" id="recommendedQuestions"></div>
+                        </div>
+                    </div>
                 </div>
                 <div class="chat-input-actions">
-                    <div class="chat-input-hint">Enter 发送，Shift + Enter 换行</div>
-                    <button type="submit" class="btn btn-primary" id="submitBtn"><i class="bi bi-send-fill me-1"></i>发送</button>
+                    <div class="chat-input-hint">Press Enter to send, Shift+Enter for newline</div>
+                    <button type="submit" class="btn btn-primary" id="submitBtn"><i class="bi bi-send-fill me-1"></i>Send</button>
                 </div>
             </form>
         </div>
@@ -800,20 +955,34 @@
     let pendingUpdate = false;
     //当前会话的ID,初始化为null,表示暂时未选择任何会话
     let currentSessionId = null;
-    //会话列表,初始为空数组,用于存储所有的会话对象
+    //Session list,初始为空数组,用于存储所有的会话对象
     let sessions = [];
-    //当前知识库的ID，初始值为null,表示没有选择任何的知识库
+    //当前Knowledge Base的ID，初始值为null,表示没有选择任何的Knowledge Base
     let currentKbId = null;
     // 记录每个会话最后一次使用的 pipeline mode（仅前端记忆）
     let sessionPipelineModes = {};
     const SESSION_MODE_STORAGE_KEY = "chat_session_pipeline_modes_v1";
     const PIPELINE_MODE_DEFAULT = "hybrid_generate";
+    const DEFAULT_SUGGESTED_QUESTIONS = [
+        "Summarize the main topics in this conversation context.",
+        "What are the key conclusions and their evidence?",
+        "List the most important constraints, assumptions, and risks.",
+        "Explain this in simple terms for a non-technical reader.",
+        "Give a short TL;DR and then 5 practical takeaways.",
+    ];
     const ALLOWED_PIPELINE_MODES = new Set([
         "vector_generate",
         "keyword_generate",
         "hybrid_generate",
         "triple_parallel",
     ]);
+    const SINGLE_MODE_BADGES = {
+        vector_generate: { label: "Vector Mode", className: "mode-vector", icon: "bi-layers" },
+        keyword_generate: { label: "Keyword Mode", className: "mode-keyword", icon: "bi-key" },
+        hybrid_generate: { label: "Hybrid Mode", className: "mode-hybrid", icon: "bi-git-merge" },
+    };
+    let suggestedQuestionReqId = 0;
+    const RECOMMEND_EXPAND_STORAGE_KEY = "chat_recommend_expanded_v1";
     //为字符串进行HTML转义，防止XSS攻击
     function escapeHtml(text) {
         const div = document.createElement("div");
@@ -825,6 +994,171 @@
         const chatMessages = document.getElementById("chatMessages");
         //设置滚动条的位置到底部
         chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+    function getKbSelect() {
+        return document.getElementById("kbSelect");
+    }
+    function getSelectedKbName() {
+        const kbSel = getKbSelect();
+        if (!kbSel) return "";
+        const opt = kbSel.options[kbSel.selectedIndex];
+        return (opt?.textContent || "").trim();
+    }
+    function getKbSuggestedFallback(kbName) {
+        const safeKbName = (kbName || "this knowledge base").trim() || "this knowledge base";
+        return [
+            `Summarize the core themes covered in ${safeKbName}.`,
+            `What are the most important facts and terms in ${safeKbName}?`,
+            `List 5 key takeaways from ${safeKbName} with concise explanations.`,
+            `What questions can ${safeKbName} answer confidently, and what are its boundaries?`,
+            `Based on ${safeKbName}, what are the best practices and common pitfalls?`,
+        ];
+    }
+    function updateQuestionPlaceholder(hasKb, kbName) {
+        const questionInput = document.getElementById("questionInput");
+        if (!questionInput) return;
+        questionInput.placeholder = hasKb
+            ? `Example: Based on ${kbName || "this knowledge base"}, summarize key findings and constraints.`
+            : "Example: Summarize key points and practical takeaways on this topic.";
+    }
+    function applySuggestedQuestion(question) {
+        const input = document.getElementById("questionInput");
+        if (!input) return;
+        input.value = question || "";
+        input.focus();
+        const len = input.value.length;
+        input.setSelectionRange(len, len);
+    }
+    function inferPipelineModeFromRetrievalMode(retrievalMode) {
+        if (retrievalMode === "vector") return "vector_generate";
+        if (retrievalMode === "keyword") return "keyword_generate";
+        if (retrievalMode === "hybrid") return "hybrid_generate";
+        return "";
+    }
+    function resolveSingleModeBadgeMeta(meta = {}) {
+        const pipelineMode = (meta?.pipeline_mode || "").trim();
+        const retrievalMode = (meta?.retrieval_mode || "").trim();
+        const candidate = pipelineMode || inferPipelineModeFromRetrievalMode(retrievalMode);
+        return SINGLE_MODE_BADGES[candidate] || null;
+    }
+    function renderSingleModeBadgeHtml(meta = {}) {
+        const badge = resolveSingleModeBadgeMeta(meta);
+        if (!badge) return "";
+        return `<span class="chat-mode-badge ${badge.className}"><i class="bi ${badge.icon}"></i>${badge.label}</span>`;
+    }
+    function applySingleModeBadge(targetEl, meta = {}) {
+        if (!targetEl) return;
+        const badge = resolveSingleModeBadgeMeta(meta);
+        if (!badge) {
+            targetEl.className = "chat-mode-badge d-none";
+            targetEl.innerHTML = "";
+            return;
+        }
+        targetEl.className = `chat-mode-badge ${badge.className}`;
+        targetEl.innerHTML = `<i class="bi ${badge.icon}"></i>${badge.label}`;
+    }
+    function getRecommendElements() {
+        return {
+            wrap: document.getElementById("recommendedQuestionsWrap"),
+            viewport: document.getElementById("recommendedQuestionsViewport"),
+            list: document.getElementById("recommendedQuestions"),
+            label: document.getElementById("recommendedQuestionsLabel"),
+            prevBtn: document.getElementById("recommendedPrevBtn"),
+            nextBtn: document.getElementById("recommendedNextBtn"),
+            toggleBtn: document.getElementById("recommendedToggleBtn"),
+        };
+    }
+    function isRecommendExpanded() {
+        try {
+            return localStorage.getItem(RECOMMEND_EXPAND_STORAGE_KEY) === "1";
+        } catch (e) {
+            return false;
+        }
+    }
+    function setRecommendExpanded(expanded) {
+        const { wrap, toggleBtn } = getRecommendElements();
+        if (!wrap || !toggleBtn) return;
+        wrap.classList.toggle("is-expanded", !!expanded);
+        wrap.classList.toggle("is-collapsed", !expanded);
+        toggleBtn.textContent = expanded ? "Collapse" : "Expand";
+        try {
+            localStorage.setItem(RECOMMEND_EXPAND_STORAGE_KEY, expanded ? "1" : "0");
+        } catch (e) {}
+        updateRecommendNavState();
+    }
+    function updateRecommendNavState() {
+        const { wrap, viewport, prevBtn, nextBtn } = getRecommendElements();
+        if (!wrap || !viewport || !prevBtn || !nextBtn) return;
+        if (wrap.classList.contains("is-expanded")) {
+            prevBtn.disabled = true;
+            nextBtn.disabled = true;
+            return;
+        }
+        const maxScroll = Math.max(0, viewport.scrollWidth - viewport.clientWidth);
+        prevBtn.disabled = viewport.scrollLeft <= 6;
+        nextBtn.disabled = viewport.scrollLeft >= maxScroll - 6;
+    }
+    function initRecommendInteractions() {
+        const { viewport, prevBtn, nextBtn, toggleBtn } = getRecommendElements();
+        if (!viewport || !prevBtn || !nextBtn || !toggleBtn) return;
+        prevBtn.addEventListener("click", () => {
+            viewport.scrollBy({ left: -Math.max(260, Math.round(viewport.clientWidth * 0.8)), behavior: "smooth" });
+        });
+        nextBtn.addEventListener("click", () => {
+            viewport.scrollBy({ left: Math.max(260, Math.round(viewport.clientWidth * 0.8)), behavior: "smooth" });
+        });
+        toggleBtn.addEventListener("click", () => {
+            const { wrap } = getRecommendElements();
+            if (!wrap) return;
+            setRecommendExpanded(!wrap.classList.contains("is-expanded"));
+        });
+        viewport.addEventListener("scroll", updateRecommendNavState, { passive: true });
+        window.addEventListener("resize", updateRecommendNavState);
+        setRecommendExpanded(isRecommendExpanded());
+    }
+    function renderSuggestedQuestions(questions, hasKb) {
+        const { list, label } = getRecommendElements();
+        if (!list || !label) return;
+        list.innerHTML = "";
+        const items = (questions || []).map((q) => String(q || "").trim()).filter(Boolean).slice(0, 6);
+        label.textContent = hasKb ? "Recommended for selected knowledge base" : "General recommended questions";
+        if (!items.length) {
+            updateRecommendNavState();
+            return;
+        }
+        items.forEach((q) => {
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.className = "chat-recommend-chip";
+            btn.textContent = q;
+            btn.addEventListener("click", () => applySuggestedQuestion(q));
+            list.appendChild(btn);
+        });
+        const { viewport } = getRecommendElements();
+        if (viewport) viewport.scrollLeft = 0;
+        updateRecommendNavState();
+    }
+    async function refreshSuggestedQuestions() {
+        const kbId = (getKbSelect()?.value || "").trim();
+        const kbName = getSelectedKbName();
+        const reqId = ++suggestedQuestionReqId;
+        if (!kbId) {
+            updateQuestionPlaceholder(false, "");
+            renderSuggestedQuestions(DEFAULT_SUGGESTED_QUESTIONS, false);
+            return;
+        }
+        updateQuestionPlaceholder(true, kbName);
+        const fallbackQuestions = getKbSuggestedFallback(kbName);
+        try {
+            const response = await fetch(`/api/v1/knowledgebases/${kbId}/navigation`);
+            const result = await response.json();
+            if (reqId !== suggestedQuestionReqId) return;
+            const questions = result?.code === 200 ? result?.data?.suggested_questions || [] : [];
+            renderSuggestedQuestions(questions.length ? questions : fallbackQuestions, true);
+        } catch (e) {
+            if (reqId !== suggestedQuestionReqId) return;
+            renderSuggestedQuestions(fallbackQuestions, true);
+        }
     }
     function getPipelineModeSelect() {
         return document.getElementById("pipelineModeSelect");
@@ -858,7 +1192,7 @@
     function decorateInlineCitations(text) {
         if (!text) return "";
         return String(text).replace(/\[\^(\d{1,3})\]/g, (_, idx) => {
-            return `<sup class="inline-citation-ref" data-citation-index="${idx}" title="查看引用来源 ${idx}">[${idx}]</sup>`;
+            return `<sup class="inline-citation-ref" data-citation-index="${idx}" title="View citation source ${idx}">[${idx}]</sup>`;
         });
     }
     function renderMarkdown(text) {
@@ -866,10 +1200,27 @@
     }
     function renderMarkdownToElement(element, text) {
         if (!text) {
-            element.innerHTML = '<i class="bi bi-hourglass-split"></i>思考中...';
+            element.innerHTML = '<i class="bi bi-hourglass-split"></i>Thinking...';
             return;
         }
         element.innerHTML = renderMarkdown(text);
+    }
+    function ensureStreamingNodes(element) {
+        let wrap = element.querySelector(".streaming-content");
+        if (!wrap) {
+            element.innerHTML =
+                '<div class="streaming-content"><span class="streaming-text"></span><span class="streaming-cursor" aria-hidden="true"></span></div>';
+            wrap = element.querySelector(".streaming-content");
+        }
+        return {
+            wrap,
+            textNode: wrap?.querySelector(".streaming-text"),
+        };
+    }
+    function renderStreamingTextToElement(element, text) {
+        const nodes = ensureStreamingNodes(element);
+        if (!nodes?.textNode) return;
+        nodes.textNode.textContent = text || "";
     }
     // 用于格式化时间字符串为友好显示
     function formatTime(timeStr) {
@@ -887,14 +1238,14 @@
         const hours = Math.floor(diff / 3600000);
         // 换算为天数
         const days = Math.floor(diff / 86400000);
-        // 1分钟内显示“刚刚”
-        if (minutes < 1) return "刚刚";
-        // 1小时内显示“x分钟前”
-        if (minutes < 60) return `${minutes}分钟前`;
-        // 24小时内显示“x小时前”
-        if (hours < 24) return `${hours}小时前`;
-        // 7天内显示“x天前”
-        if (days < 7) return `${days}天前`;
+        // 1分钟内显示“Just now”
+        if (minutes < 1) return "Just now";
+        // 1小时内显示“xmin ago”
+        if (minutes < 60) return `${minutes}min ago`;
+        // 24小时内显示“xh ago”
+        if (hours < 24) return `${hours}h ago`;
+        // 7天内显示“xd ago”
+        if (days < 7) return `${days}d ago`;
         // 超过7天显示具体日期
         return date.toLocaleDateString();
     }
@@ -902,12 +1253,12 @@
         document.getElementById("chatMessages").innerHTML = `
              <div class="empty-state">
                  <i class="bi bi-chat-left-text" style="font-size: 2.75rem;"></i>
-                 <p class="mt-2 small">还没有消息，输入一个明确问题开始对话</p>
+                 <p class="mt-2 small">No messages yet. Enter a clear question to begin.</p>
              </div>
          `;
     }
     async function clearAllSessions() {
-        if (!confirm("确定要删除你所有的会话吗?此操作不可恢复!")) return;
+        if (!confirm("Delete all sessions? This action cannot be undone!")) return;
         try {
             const response = await fetch(`/api/v1/sessions`, { method: "DELETE" });
             const result = await response.json();
@@ -917,14 +1268,14 @@
                 clearChatMessages();
                 await loadSessions();
             } else {
-                alert("删除会话失败:" + result.message);
+                alert("Failed to delete session:" + result.message);
             }
         } catch (error) {
-            alert("删除会话失败:" + error.message);
+            alert("Failed to delete session:" + error.message);
         }
     }
     async function deleteSession(sessionId) {
-        if (!confirm("确定要删除这个会话吗?此操作不可恢复!")) return;
+        if (!confirm("Delete this session? This action cannot be undone!")) return;
         try {
             const response = await fetch(`/api/v1/sessions/${sessionId}`, { method: "DELETE" });
             const result = await response.json();
@@ -937,10 +1288,10 @@
                 }
                 await loadSessions();
             } else {
-                alert("删除会话失败:" + result.message);
+                alert("Failed to delete session:" + result.message);
             }
         } catch (error) {
-            alert("删除会话失败:" + error.message);
+            alert("Failed to delete session:" + error.message);
         }
     }
     async function renderSessions() {
@@ -949,14 +1300,14 @@
             sessionList.innerHTML = `
                  <div class="text-center text-muted py-4">
                       <i class="bi bi-chat-left-text" style="font-size: 1.75rem;"></i>
-                      <p class="mt-2 small mb-0">暂无会话</p>
+                      <p class="mt-2 small mb-0">No sessions yet</p>
                   </div>
              `;
             return;
         }
         sessionList.innerHTML = sessions
             ?.map((session) => {
-                const title = session.title || "新对话";
+                const title = session.title || "New chat";
                 const initial = title.length ? title.slice(0, 1) : "?";
                 return `
         <div class="session-item ${session.id === currentSessionId ? "active" : ""}"
@@ -985,29 +1336,40 @@
     function buildTripleMetaText(meta) {
         const retrieved = Number(meta?.retrieved_chunks);
         const retrievedText = Number.isFinite(retrieved) ? retrieved : "--";
-        const retrievalText = formatElapsedForUi(meta?.retrieval_elapsed_ms);
-        const generationText = formatElapsedForUi(meta?.generation_elapsed_ms);
-        return `检索 ${retrievedText}条/${retrievalText} | 生成 ${generationText}`;
+        const retrievalMs = Number(meta?.retrieval_elapsed_ms);
+        const generationMs = Number(meta?.generation_elapsed_ms);
+        const hasRet = Number.isFinite(retrievalMs) && retrievalMs >= 0;
+        const hasGen = Number.isFinite(generationMs) && generationMs >= 0;
+        const pipelineMsRaw = Number(meta?.pipeline_elapsed_ms);
+        const pipelineMs = Number.isFinite(pipelineMsRaw) && pipelineMsRaw >= 0
+            ? pipelineMsRaw
+            : hasRet && hasGen
+            ? retrievalMs + generationMs
+            : NaN;
+        const pipelineText = formatElapsedForUi(pipelineMs);
+        const retrievalText = formatElapsedForUi(retrievalMs);
+        const generationText = formatElapsedForUi(generationMs);
+        return `Chunks ${retrievedText} | Pipe ${pipelineText} (Ret ${retrievalText} / Gen ${generationText})`;
     }
 
-    // 历史消息渲染也会用到评估渲染工具，需放在全局作用域
+    // 历史消息渲染也会用到Evaluation渲染工具，需放在全局作用域
     const EVAL_LABELS = {
-        "hit@1": { short: "H@1", full: "Hit Rate @1（Top-1 命中率）" },
-        "precision@1": { short: "P@1", full: "Precision @1（Top-1 精确率）" },
-        "recall@1": { short: "R@1", full: "Recall @1（Top-1 召回率）" },
-        "hit@3": { short: "H@3", full: "Hit Rate @3（Top-3 命中率）" },
-        "precision@3": { short: "P@3", full: "Precision @3（Top-3 精确率）" },
-        "recall@3": { short: "R@3", full: "Recall @3（Top-3 召回率）" },
-        exact_match: { short: "EM", full: "Exact Match（完全匹配）" },
-        token_f1: { short: "F1", full: "Token-level F1（词级 F1）" },
-        semantic_similarity: { short: "SIM", full: "Semantic Similarity（语义相似度）" },
-        citation_coverage: { short: "COV", full: "Citation Coverage（引用覆盖率）" },
-        citation_consistency: { short: "CONS", full: "Citation Consistency（引用一致性）" },
-        request_elapsed_ms: { short: "Req", full: "Request Elapsed (ms)（请求总耗时）" },
-        pipeline_elapsed_ms: { short: "Pipe", full: "Pipeline Elapsed (ms)（流水线耗时）" },
-        retrieval_elapsed_ms: { short: "Ret", full: "Retrieval Elapsed (ms)（检索耗时）" },
-        generation_elapsed_ms: { short: "Gen", full: "Generation Elapsed (ms)（生成耗时）" },
-        branch_score: { short: "Score", full: "Branch Score（分支综合评分）" },
+        "hit@1": { short: "H@1", full: "Hit Rate @1 (Top-1)" },
+        "precision@1": { short: "P@1", full: "Precision @1 (Top-1)" },
+        "recall@1": { short: "R@1", full: "Recall @1 (Top-1)" },
+        "hit@3": { short: "H@3", full: "Hit Rate @3 (Top-3)" },
+        "precision@3": { short: "P@3", full: "Precision @3 (Top-3)" },
+        "recall@3": { short: "R@3", full: "Recall @3 (Top-3)" },
+        exact_match: { short: "EM", full: "Exact Match" },
+        token_f1: { short: "F1", full: "Token-level F1" },
+        semantic_similarity: { short: "SIM", full: "Semantic Similarity" },
+        citation_coverage: { short: "COV", full: "Citation Coverage" },
+        citation_consistency: { short: "CONS", full: "Citation Consistency" },
+        request_elapsed_ms: { short: "Req", full: "Request Elapsed (ms)" },
+        pipeline_elapsed_ms: { short: "Pipe", full: "Pipeline Elapsed (ms)" },
+        retrieval_elapsed_ms: { short: "Ret", full: "Retrieval Elapsed (ms)" },
+        generation_elapsed_ms: { short: "Gen", full: "Generation Elapsed (ms)" },
+        branch_score: { short: "Score", full: "Branch Score" },
     };
 
     function evalLabelMeta(key) {
@@ -1049,7 +1411,7 @@
             <div class="eval-panel">
                 <div class="eval-header">
                     <div class="eval-title"><i class="bi bi-clipboard2-data"></i> ${title}</div>
-                    <button type="button" class="eval-toggle" data-eval-toggle="${bodyId}" aria-expanded="false">展开</button>
+                    <button type="button" class="eval-toggle" data-eval-toggle="${bodyId}" aria-expanded="false">Expand</button>
                 </div>
                 <div class="eval-body" id="${bodyId}">
                     <div class="eval-grid">${bodyHtml}</div>
@@ -1117,9 +1479,9 @@
     function renderTripleHistoryAnswer(msg, triple, evaluation) {
         const time = formatTime(msg.created_at);
         const branches = [
-            { key: "vector", label: "向量检索", icon: "bi-layers", color: "text-primary" },
-            { key: "keyword", label: "关键词检索", icon: "bi-key", color: "text-success" },
-            { key: "hybrid", label: "混合检索", icon: "bi-git-merge", color: "text-info" },
+            { key: "vector", label: "Vector Retrieval", icon: "bi-layers", color: "text-primary" },
+            { key: "keyword", label: "Keyword Retrieval", icon: "bi-key", color: "text-success" },
+            { key: "hybrid", label: "Hybrid Retrieval", icon: "bi-git-merge", color: "text-info" },
         ];
         const recommendedBranch = evaluation?.recommended_branch;
         const cols = branches
@@ -1128,7 +1490,7 @@
                 const metaText = buildTripleMetaText(data);
                 const detail = evaluation?.branch_metrics?.[b.key] || null;
                 const score = evaluation?.branch_scores?.[b.key];
-                const evalTitle = recommendedBranch === b.key ? "评估 · 推荐" : "评估";
+                const evalTitle = recommendedBranch === b.key ? "Evaluation · Recommended" : "Evaluation";
                 const evalItems = buildEvaluationTripleBranchItems(detail, score);
                 const evalHtml = makeEvalPanelHtml(evalTitle, evalItems, `eval_history_${b.key}`);
                 const answerHtml = data.answer
@@ -1152,7 +1514,7 @@
         return `
         <div class="chat-message chat-answer">
             <div class="d-flex justify-content-between align-items-center mb-1">
-                <span class="chat-role-badge"><i class="bi bi-robot"></i> 助手</span>
+                <span class="chat-role-badge"><i class="bi bi-robot"></i> Assistant</span>
                 <small class="text-muted">${time}</small>
             </div>
             <div class="chat-answer-body">
@@ -1169,7 +1531,7 @@
             chatMessages.innerHTML = `
              <div class="empty-state">
                  <i class="bi bi-chat-left-text" style="font-size: 3rem;"></i>
-                 <p class="mt-2">开始提问吧！</p>
+                 <p class="mt-2">Start asking!</p>
              </div>
          `;
             return;
@@ -1182,7 +1544,7 @@
                  <div class="chat-message chat-question">
                      <div class="d-flex justify-content-between align-items-start gap-2">
                          <div class="flex-grow-1">
-                             <span class="chat-role-badge"><i class="bi bi-person-circle"></i> 你</span>
+                             <span class="chat-role-badge"><i class="bi bi-person-circle"></i> You</span>
                              <div class="chat-bubble-text mt-2">${escapeHtml(msg.content)}</div>
                          </div>
                          <small class="text-muted flex-shrink-0">${formatTime(msg.created_at)}</small>
@@ -1201,12 +1563,16 @@
                     extraSources = generateSourcesHTML(storedSources, payload.metadata || {}, currentKbId);
                 }
                 const evalHtml = storedEvaluation
-                    ? makeEvalPanelHtml("评估", buildEvaluationSingleItems(storedEvaluation), "eval_history_single")
+                    ? makeEvalPanelHtml("Evaluation", buildEvaluationSingleItems(storedEvaluation), "eval_history_single")
                     : "";
+                const modeBadgeHtml = renderSingleModeBadgeHtml(payload.metadata || {});
                 return `
                  <div class="chat-message chat-answer">
                      <div class="d-flex justify-content-between align-items-center mb-1">
-                         <span class="chat-role-badge"><i class="bi bi-robot"></i> 助手</span>
+                         <div class="d-flex align-items-center gap-2">
+                             <span class="chat-role-badge"><i class="bi bi-robot"></i> Assistant</span>
+                             ${modeBadgeHtml}
+                         </div>
                          <small class="text-muted">${formatTime(msg.created_at)}</small>
                      </div>
                      <div class="chat-answer-body">
@@ -1247,6 +1613,7 @@
                         : PIPELINE_MODE_DEFAULT;
                 }
                 updatePipelineUi();
+                refreshSuggestedQuestions();
                 //此会话对应的消息列表
                 const messages = result.data.messages || [];
                 //将消息列表渲染到页面上
@@ -1254,7 +1621,7 @@
                 await loadSessions();
             }
         } catch (error) {
-            alert("加载会话列表失败:" + error.message);
+            alert("Failed to load session list: " + error.message);
         }
     }
     async function loadSessions() {
@@ -1267,7 +1634,7 @@
                 renderSessions();
             }
         } catch (error) {
-            alert("加载会话列表失败:" + error.message);
+            alert("Failed to load session list: " + error.message);
         }
     }
     async function createNewSession() {
@@ -1281,13 +1648,13 @@
             //如果返回状态码为200,说明创建会话成功,切换到新的会话
             if (result.code == 200) {
                 currentSessionId = result.data.id;
-                //重新加载最新的会话列表
+                //重新加载最新的Session list
                 await loadSessions();
                 //清空聊天消息
                 //clearChatMessages()
             }
         } catch (error) {
-            alert("创建会话失败:" + error.message);
+            alert("Failed to create session:" + error.message);
         }
     }
 
@@ -1305,7 +1672,7 @@
         questionDiv.innerHTML = `
          <div class="d-flex justify-content-between align-items-start gap-2">
              <div class="flex-grow-1">
-                 <span class="chat-role-badge"><i class="bi bi-person-circle"></i> 你</span>
+                 <span class="chat-role-badge"><i class="bi bi-person-circle"></i> You</span>
                  <div class="chat-bubble-text mt-2">${escapeHtml(question)}</div>
              </div>
              <small class="text-muted flex-shrink-0">${new Date().toLocaleTimeString()}</small>
@@ -1324,12 +1691,16 @@
         // 答案div显示机器人图标和时间
         answerDiv.innerHTML = `
              <div class="d-flex justify-content-between align-items-center mb-1">
-                 <span class="chat-role-badge"><i class="bi bi-robot"></i> 助手</span>
+                 <div class="d-flex align-items-center gap-2">
+                     <span class="chat-role-badge"><i class="bi bi-robot"></i> Assistant</span>
+                     <span class="chat-mode-badge d-none" data-role="modeBadge"></span>
+                 </div>
                  <small class="text-muted">${new Date().toLocaleTimeString()}</small>
              </div>
              <div class="chat-answer-body"></div>
          `;
         const answerBody = answerDiv.querySelector(".chat-answer-body");
+        const modeBadgeEl = answerDiv.querySelector('[data-role="modeBadge"]');
         answerBody.appendChild(answerContent);
         chatMessages.appendChild(answerDiv);
 
@@ -1340,9 +1711,9 @@
 
         function tripleGridHtml() {
             const cols = [
-                { key: "vector", label: "向量检索", icon: "bi-layers", color: "text-primary" },
-                { key: "keyword", label: "关键词检索", icon: "bi-key", color: "text-success" },
-                { key: "hybrid", label: "混合检索", icon: "bi-git-merge", color: "text-info" },
+                { key: "vector", label: "Vector Retrieval", icon: "bi-layers", color: "text-primary" },
+                { key: "keyword", label: "Keyword Retrieval", icon: "bi-key", color: "text-success" },
+                { key: "hybrid", label: "Hybrid Retrieval", icon: "bi-git-merge", color: "text-info" },
             ];
             return cols
                 .map(
@@ -1350,9 +1721,13 @@
                 <div class="answer-triple-col" data-branch="${c.key}">
                     <div class="answer-triple-col-head ${c.color} fw-semibold small mb-1">
                         <span><i class="bi ${c.icon}"></i> ${c.label}</span>
-                        <span class="answer-triple-meta" data-role="meta">检索 -- | 生成 --</span>
+                        <span class="answer-triple-meta" data-role="meta">Chunks -- | Pipe -- (Ret -- / Gen --)</span>
                     </div>
-                    <div class="markdown-content answer-triple-md"><i class="bi bi-hourglass-split"></i> 思考中…</div>
+                    <div class="markdown-content answer-triple-md">
+                        <div class="streaming-content">
+                            <span class="streaming-text"></span><span class="streaming-cursor" aria-hidden="true"></span>
+                        </div>
+                    </div>
                     <div class="answer-triple-src-wrap"></div>
                 </div>`
                 )
@@ -1385,22 +1760,22 @@
         }
 
         const EVAL_LABELS = {
-            "hit@1": { short: "H@1", full: "Hit Rate @1（Top-1 命中率）" },
-            "precision@1": { short: "P@1", full: "Precision @1（Top-1 精确率）" },
-            "recall@1": { short: "R@1", full: "Recall @1（Top-1 召回率）" },
-            "hit@3": { short: "H@3", full: "Hit Rate @3（Top-3 命中率）" },
-            "precision@3": { short: "P@3", full: "Precision @3（Top-3 精确率）" },
-            "recall@3": { short: "R@3", full: "Recall @3（Top-3 召回率）" },
-            exact_match: { short: "EM", full: "Exact Match（完全匹配）" },
-            token_f1: { short: "F1", full: "Token-level F1（词级 F1）" },
-            semantic_similarity: { short: "SIM", full: "Semantic Similarity（语义相似度）" },
-            citation_coverage: { short: "COV", full: "Citation Coverage（引用覆盖率）" },
-            citation_consistency: { short: "CONS", full: "Citation Consistency（引用一致性）" },
-            request_elapsed_ms: { short: "Req", full: "Request Elapsed (ms)（请求总耗时）" },
-            pipeline_elapsed_ms: { short: "Pipe", full: "Pipeline Elapsed (ms)（流水线耗时）" },
-            retrieval_elapsed_ms: { short: "Ret", full: "Retrieval Elapsed (ms)（检索耗时）" },
-            generation_elapsed_ms: { short: "Gen", full: "Generation Elapsed (ms)（生成耗时）" },
-            branch_score: { short: "Score", full: "Branch Score（分支综合评分）" },
+            "hit@1": { short: "H@1", full: "Hit Rate @1 (Top-1)" },
+            "precision@1": { short: "P@1", full: "Precision @1 (Top-1)" },
+            "recall@1": { short: "R@1", full: "Recall @1 (Top-1)" },
+            "hit@3": { short: "H@3", full: "Hit Rate @3 (Top-3)" },
+            "precision@3": { short: "P@3", full: "Precision @3 (Top-3)" },
+            "recall@3": { short: "R@3", full: "Recall @3 (Top-3)" },
+            exact_match: { short: "EM", full: "Exact Match" },
+            token_f1: { short: "F1", full: "Token-level F1" },
+            semantic_similarity: { short: "SIM", full: "Semantic Similarity" },
+            citation_coverage: { short: "COV", full: "Citation Coverage" },
+            citation_consistency: { short: "CONS", full: "Citation Consistency" },
+            request_elapsed_ms: { short: "Req", full: "Request Elapsed (ms)" },
+            pipeline_elapsed_ms: { short: "Pipe", full: "Pipeline Elapsed (ms)" },
+            retrieval_elapsed_ms: { short: "Ret", full: "Retrieval Elapsed (ms)" },
+            generation_elapsed_ms: { short: "Gen", full: "Generation Elapsed (ms)" },
+            branch_score: { short: "Score", full: "Branch Score" },
         };
 
         function evalLabelMeta(key) {
@@ -1435,7 +1810,7 @@
                 <div class="eval-panel">
                     <div class="eval-header">
                         <div class="eval-title"><i class="bi bi-clipboard2-data"></i> ${title}</div>
-                        <button type="button" class="eval-toggle" data-eval-toggle="${bodyId}" aria-expanded="false">展开</button>
+                        <button type="button" class="eval-toggle" data-eval-toggle="${bodyId}" aria-expanded="false">Expand</button>
                     </div>
                     <div class="eval-body" id="${bodyId}">
                         <div class="eval-grid">${bodyHtml}</div>
@@ -1456,7 +1831,7 @@
                 ${buildEvalItems(rf, ["citation_coverage", "citation_consistency"])}
                 ${buildEvalItems(ef, ["request_elapsed_ms", "pipeline_elapsed_ms"], false)}
             `;
-            const html = makeEvalPanelHtml("评估", items, "eval_single");
+            const html = makeEvalPanelHtml("Evaluation", items, "eval_single");
             if (prepend) targetParent.insertAdjacentHTML("afterbegin", html);
             else targetParent.insertAdjacentHTML("beforeend", html);
         }
@@ -1472,7 +1847,7 @@
                 const detail = branchMetrics[b];
                 if (!detail) return;
                 const score = branchScores[b];
-                const title = recommended === b ? "评估 · 推荐" : "评估";
+                const title = recommended === b ? "Evaluation · Recommended" : "Evaluation";
                 const items = `
                     ${buildEvalItems(detail.retrieval_quality || {}, ["hit@1", "precision@1", "recall@1", "hit@3"])}
                     ${buildEvalItems(detail.answer_quality || {}, ["exact_match", "token_f1", "semantic_similarity"])}
@@ -1506,7 +1881,7 @@
                 if (!tripleRefs) return;
                 ["vector", "keyword", "hybrid"].forEach((b) => {
                     if (tripleRefs[b] && tripleRefs[b].md) {
-                        renderMarkdownToElement(tripleRefs[b].md, branchAnswers[b]);
+                        renderStreamingTextToElement(tripleRefs[b].md, branchAnswers[b]);
                     }
                 });
                 scrollToBottom();
@@ -1520,7 +1895,7 @@
                 pendingUpdate = true;
                 //在下一帧渲染
                 requestAnimationFrame(() => {
-                    renderMarkdownToElement(answerContent, fullAnswer);
+                    renderStreamingTextToElement(answerContent, fullAnswer);
                     pendingUpdate = false;
                     scrollToBottom();
                 });
@@ -1551,7 +1926,7 @@
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(body),
             });
-            if (!response.ok) throw new Error("请求聊天失败");
+            if (!response.ok) throw new Error("Chat request failed");
             const responseSessionId = response.headers.get("X-Session-Id");
             if (responseSessionId) {
                 currentSessionId = responseSessionId;
@@ -1565,7 +1940,7 @@
             const decoder = new TextDecoder();
             //构建一个数据缓存区(字符串)
             let buffer = "";
-            //重新加载会话列表以更新标题
+            //重新加载Session list以更新标题
             await loadSessions();
             while (true) {
                 //逐步读取一段数据
@@ -1592,6 +1967,7 @@
                             fullAnswer = "";
                             if (chunk.metadata?.pipeline_mode === "triple_parallel") {
                                 tripleMode = true;
+                                applySingleModeBadge(modeBadgeEl, { pipeline_mode: "triple_parallel" });
                                 branchAnswers.vector = "";
                                 branchAnswers.keyword = "";
                                 branchAnswers.hybrid = "";
@@ -1600,16 +1976,20 @@
                                 tripleRefs = wireTripleRefs();
                             } else {
                                 tripleMode = false;
+                                applySingleModeBadge(modeBadgeEl, {
+                                    pipeline_mode: selectedPipelineMode,
+                                });
                                 tripleRefs = null;
                                 answerContent.className = "markdown-content";
-                                answerContent.innerHTML = '<i class="bi bi-hourglass-split"></i> 思考中...';
+                                answerContent.innerHTML =
+                                    '<div class="streaming-content"><span class="streaming-text"></span><span class="streaming-cursor" aria-hidden="true"></span></div>';
                             }
                         } else if (chunk.type == "branch_start") {
                             if (!tripleMode) {
                                 const labels = {
-                                    vector: "向量检索",
-                                    keyword: "关键词检索",
-                                    hybrid: "混合检索",
+                                    vector: "Vector Retrieval",
+                                    keyword: "Keyword Retrieval",
+                                    hybrid: "Hybrid Retrieval",
                                 };
                                 fullAnswer += `\n\n### ${labels[chunk.branch] || chunk.branch}\n\n`;
                                 scheduleRender();
@@ -1643,6 +2023,7 @@
                                 renderSources(chunk.sources, chunk.metadata, answerDiv, currentKbId);
                             }
                         } else if (chunk.type == "done") {
+                            applySingleModeBadge(modeBadgeEl, chunk.metadata || {});
                             if (chunk.metadata?.pipeline_mode === "triple_parallel") {
                                 ["vector", "keyword", "hybrid"].forEach((b) => {
                                     const finalBranchAnswer = chunk.metadata?.triple?.[b]?.answer;
@@ -1658,7 +2039,7 @@
                                 renderEvaluationTriple(chunk.metadata?.evaluation, tripleRefs);
                             } else if (chunk.metadata?.pipeline_mode === "retrieve_only" && !fullAnswer) {
                                 answerContent.innerHTML =
-                                    '<p class="text-muted small mb-0"><i class="bi bi-search"></i> 仅检索模式：未调用大模型。</p>';
+                                    '<p class="text-muted small mb-0"><i class="bi bi-search"></i> Retrieve-only mode: no LLM call executed.</p>';
                             } else {
                                 const finalAnswer = chunk.metadata?.answer_with_citations || fullAnswer;
                                 fullAnswer = finalAnswer;
@@ -1675,7 +2056,7 @@
                 }
             }
         } catch (error) {
-            answerContent.innerHTML = `<div class="alert alert-danger"><strong>错误:</strong> ${error.message}</div>`;
+            answerContent.innerHTML = `<div class="alert alert-danger"><strong>Error:</strong> ${error.message}</div>`;
         }
         scrollToBottom();
     }
@@ -1703,41 +2084,41 @@
                     const doc_id = source.doc_id;
                     const doc_name = source.doc_name;
                     const content = source.content;
-                    //判断是否是向量检索
+                    //判断是否是Vector Retrieval
                     const isVector = retrieval_type.includes("vector");
                     //判断是否是关键字检索
                     const isKeyword = retrieval_type.includes("keyword");
-                    //判断是否是混合检索
+                    //判断是否是Hybrid Retrieval
                     const isHybrid = retrieval_type.includes("hybrid");
 
                     const hasNumber = (v) => typeof v === "number" && Number.isFinite(v);
                     const scoreText = (v) => hasNumber(v) ? v : "N/A";
 
                     if (isHybrid) {
-                        scores.push(`<span  class="badge bg-info me-1">向量分数:${scoreText(vector_score)}</span>`);
-                        scores.push(`<span class="badge bg-success me-1">关键字分数:${scoreText(keyword_score)}</span>`);
-                        scores.push(`<span class="badge bg-primary me-1">融合分数:${scoreText(rrf_score)}</span>`);
+                        scores.push(`<span  class="badge bg-info me-1">Vector score:${scoreText(vector_score)}</span>`);
+                        scores.push(`<span class="badge bg-success me-1">Keyword score:${scoreText(keyword_score)}</span>`);
+                        scores.push(`<span class="badge bg-primary me-1">Fusion score:${scoreText(rrf_score)}</span>`);
                     } else if (isVector) {
-                        scores.push(`<span class="badge bg-info me-1" >向量分数:${scoreText(vector_score)}</span>`);
+                        scores.push(`<span class="badge bg-info me-1" >Vector score:${scoreText(vector_score)}</span>`);
                     } else if (isKeyword) {
-                        scores.push(`<span class="badge bg-success me-1">关键字分数:${scoreText(keyword_score)}</span>`);
+                        scores.push(`<span class="badge bg-success me-1">Keyword score:${scoreText(keyword_score)}</span>`);
                     }
                     if (rerank_score !== null && rerank_score !== undefined) {
-                        scores.push(`<span class="badge bg-danger me-1">重排序分数:${scoreText(rerank_score)}</span>`);
+                        scores.push(`<span class="badge bg-danger me-1">Rerank score:${scoreText(rerank_score)}</span>`);
                     } else {
-                        scores.push('<span class="badge bg-secondary me-1">重排序分数:N/A</span>');
+                        scores.push('<span class="badge bg-secondary me-1">Rerank score:N/A</span>');
                     }
                     // 返回单个引用块的 html 字符串
                     return `
                 <div class="source-item chat-source-item mb-2 p-2 border rounded" data-citation-index="${idx + 1}">
                     <div class="fw-bold mb-1">
-                        <i class="bi bi-file-earmark"></i> ${idx + 1}. ${doc_name || "未知文档"}
+                        <i class="bi bi-file-earmark"></i> ${idx + 1}. ${doc_name || "Unknown document"}
                     </div>
                     <div class="mb-2">
-                        ${scores?.length > 0 ? scores.join("") : '<span class="text-muted small">暂无分数信息</span>'}
+                        ${scores?.length > 0 ? scores.join("") : '<span class="text-muted small">No score data</span>'}
                     </div>
                     <div class="small text-muted">
-                        <strong>分块内容：</strong>
+                        <strong>Chunk content:</strong>
                         <div class="mt-1 p-2 bg-white rounded" style="max-height: 150px; overflow-y: auto; font-size: 0.9em;">
                             ${escapeHtml(content || "")}
                         </div>
@@ -1745,16 +2126,16 @@
                 </div>
             `;
                 })
-                .join("") ?? "未检索到来源文档";
-        // 返回所有引用来源的 html 块
+                .join("") ?? "No source documents retrieved";
+        // 返回所有Citation Sources的 html 块
         if (!sourcesHTML) return "";
         const sourceBlockId = `src_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
         return `
             <div class="chat-sources-block mt-2 p-2 rounded border bg-light">
                 <div class="chat-sources-header fw-semibold small text-secondary">
-                    <span><i class="bi bi-link-45deg"></i> 引用来源 (${sources?.length ?? 0})</span>
+                    <span><i class="bi bi-link-45deg"></i> Citation Sources (${sources?.length ?? 0})</span>
                     <button type="button" class="chat-sources-toggle" data-source-toggle="${sourceBlockId}" aria-expanded="false">
-                        展开
+                        Expand
                     </button>
                 </div>
                 <div class="chat-sources-body" id="${sourceBlockId}">
@@ -1769,7 +2150,7 @@
         if (!sidebar || !btn) return;
         sidebar.classList.toggle("chat-sidebar--collapsed", collapsed);
         btn.setAttribute("aria-expanded", collapsed ? "false" : "true");
-        btn.title = collapsed ? "展开侧边栏" : "收起侧边栏";
+        btn.title = collapsed ? "Expand sidebar" : "Collapse sidebar";
         const icon = btn.querySelector("i");
         if (icon) icon.className = collapsed ? "bi bi-chevron-double-right" : "bi bi-chevron-double-left";
     }
@@ -1814,7 +2195,7 @@
         );
         if (toggle) {
             toggle.setAttribute("aria-expanded", "true");
-            toggle.textContent = "收起";
+            toggle.textContent = "Collapse";
         }
     }
 
@@ -1852,11 +2233,11 @@
             if (expanded) {
                 body.style.display = "none";
                 evalBtn.setAttribute("aria-expanded", "false");
-                evalBtn.textContent = "展开";
+                evalBtn.textContent = "Expand";
             } else {
                 body.style.display = "block";
                 evalBtn.setAttribute("aria-expanded", "true");
-                evalBtn.textContent = "收起";
+                evalBtn.textContent = "Collapse";
             }
             return;
         }
@@ -1869,19 +2250,21 @@
         if (expanded) {
             body.style.display = "none";
             toggleBtn.setAttribute("aria-expanded", "false");
-            toggleBtn.textContent = "展开";
+            toggleBtn.textContent = "Expand";
         } else {
             body.style.display = "block";
             toggleBtn.setAttribute("aria-expanded", "true");
-            toggleBtn.textContent = "收起";
+            toggleBtn.textContent = "Collapse";
         }
     });
 
     document.addEventListener("DOMContentLoaded", function () {
         initSidebarToggle();
+        initRecommendInteractions();
         loadSessionModeCache();
         loadSessions();
         updatePipelineUi();
+        refreshSuggestedQuestions();
         if (typeof marked !== "undefined") {
             // 配置 marked.js 的渲染选项
             marked.setOptions({
@@ -1919,7 +2302,7 @@
     async function onKbChange() {
         currentKbId = document.getElementById("kbSelect").value;
         if (currentSessionId) {
-            // 切换知识库时重置当前会话，避免不同知识库串在同一会话
+            // 切换Knowledge Base时重置当前会话，避免不同Knowledge Base串在同一会话
             currentSessionId = null;
             clearChatMessages();
         }
@@ -1927,6 +2310,7 @@
         if (pm) pm.value = PIPELINE_MODE_DEFAULT;
         document.getElementById("submitBtn").disabled = false;
         updatePipelineUi();
+        refreshSuggestedQuestions();
     }
 </script>
 {% endblock %}

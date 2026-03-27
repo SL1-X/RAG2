@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 
-{% block title %}首页 - 智能问答系统{% endblock %}
+{% block title %}Home - Smart QA System{% endblock %}
 
-{% block header_title %}首页{% endblock %}
+{% block header_title %}Home{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -171,8 +171,8 @@
 {% block content %}
 {% if not current_user %}
 <div class="alert alert-info mb-4" role="alert">
-    <h5 class="alert-heading"><i class="bi bi-info-circle"></i> 提示</h5>
-    <p class="mb-0">访问知识库管理和聊天功能需要先 <a href="{{ url_for('auth.login') }}" class="alert-link">登录</a> 或 <a href="{{ url_for('auth.register') }}" class="alert-link">注册</a>。</p>
+    <h5 class="alert-heading"><i class="bi bi-info-circle"></i> Notice</h5>
+    <p class="mb-0">To access Knowledge Base and Chat features, please <a href="{{ url_for('auth.login') }}" class="alert-link">log in</a> or <a href="{{ url_for('auth.register') }}" class="alert-link">register</a> first.</p>
 </div>
 {% endif %}
 <div class="home row">
@@ -181,20 +181,21 @@
         <div class="card mb-4 home-hero-card">
             <div class="card-body text-center py-5">
                 <h1 class="display-4 mb-4">
-                    <i class="bi bi-book"></i> 智能问答系统
+                    <i class="bi bi-book"></i> Intelligent Document Q&A and Knowledge Base
+                    System
                 </h1>
                 <p class="lead mb-4">
-                    RAG（检索增强生成）系统
+                    Retrieval-Augmented AI for Your Team Knowledge
                 </p>
                 <p class="text-muted mb-4">
-                    基于 LangChain 和 DeepSeek API 构建的轻量级知识库问答系统
+                    Build searchable knowledge bases, run configurable retrieval pipelines, and get grounded answers with source citations.
                 </p>
                 <div class="d-flex justify-content-center gap-3">
                     <a href="/kb" class="btn btn-primary btn-lg">
-                        <i class="bi bi-collection"></i> 知识库管理
+                        <i class="bi bi-collection"></i> Manage Knowledge Bases
                     </a>
                     <a href="/chat" class="btn btn-outline-primary btn-lg">
-                        <i class="bi bi-chat-dots"></i> 开始聊天
+                        <i class="bi bi-chat-dots"></i> Start Chat
                     </a>
                 </div>
             </div>
@@ -208,9 +209,9 @@
                         <div class="mb-3">
                             <i class="bi bi-file-earmark-text" style="font-size: 3rem; color: #667eea;"></i>
                         </div>
-                        <h5 class="card-title">文档管理</h5>
+                        <h5 class="card-title">Document Management</h5>
                         <p class="card-text text-muted">
-                            支持 PDF、DOCX、TXT、MD 等多种格式文档上传和管理
+                            Upload and manage PDF, DOCX, TXT, and Markdown files in one place.
                         </p>
                     </div>
                 </div>
@@ -221,9 +222,9 @@
                         <div class="mb-3">
                             <i class="bi bi-search" style="font-size: 3rem; color: #667eea;"></i>
                         </div>
-                        <h5 class="card-title">智能检索</h5>
+                        <h5 class="card-title">Hybrid Retrieval</h5>
                         <p class="card-text text-muted">
-                            基于向量相似度的智能文档检索，快速找到相关内容
+                            Combine vector, keyword, and hybrid strategies to improve recall and relevance.
                         </p>
                     </div>
                 </div>
@@ -234,9 +235,9 @@
                         <div class="mb-3">
                             <i class="bi bi-robot" style="font-size: 3rem; color: #667eea;"></i>
                         </div>
-                        <h5 class="card-title">智能问答</h5>
+                        <h5 class="card-title">Grounded Answers</h5>
                         <p class="card-text text-muted">
-                            基于文档内容的智能问答，支持流式输出和 Markdown 渲染
+                            Get streaming answers grounded in your documents with Markdown rendering and citations.
                         </p>
                     </div>
                 </div>
@@ -246,21 +247,21 @@
         <!-- 快速开始 -->
         <!-- <div class="card mt-4 quickstart-card">
             <div class="card-header">
-                <h5 class="mb-0"><i class="bi bi-lightning-charge"></i> 快速开始</h5>
+                <h5 class="mb-0"><i class="bi bi-lightning-charge"></i> Quick Start</h5>
             </div>
             <div class="card-body">
                 <ol>
                     <li class="mb-2">
-                        <strong>创建知识库</strong>
-                        <p class="text-muted small mb-0">在知识库管理页面创建新的知识库，设置分块参数和检索参数</p>
+                        <strong>Create a Knowledge Base</strong>
+                        <p class="text-muted small mb-0">Create a new knowledge base and configure chunking/retrieval parameters.</p>
                     </li>
                     <li class="mb-2">
-                        <strong>上传文档</strong>
-                        <p class="text-muted small mb-0">在知识库详情页面上传文档，系统会自动解析、分块和向量化</p>
+                        <strong>Upload Documents</strong>
+                        <p class="text-muted small mb-0">Upload files in the KB detail page; the system will parse, chunk, and embed them automatically.</p>
                     </li>
                     <li class="mb-2">
-                        <strong>开始问答</strong>
-                        <p class="text-muted small mb-0">在聊天页面选择知识库，输入问题即可获得基于文档内容的智能回答</p>
+                        <strong>Start Asking</strong>
+                        <p class="text-muted small mb-0">Select a knowledge base in Chat, ask questions, and get grounded answers from document content.</p>
                     </li>
                 </ol>
             </div>

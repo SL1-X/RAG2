@@ -32,18 +32,9 @@ class LLMFactory:
     def _normalize_model_name_for_provider(cls, provider: str, model_name: str) -> str:
         provider = (provider or "").strip().lower()
         name = (model_name or "").strip()
-        if provider == "openai":
-            provider = "gemini"
         if provider != "gemini":
             return name
         if not name:
-            return Config.GEMINI_CHAT_MODEL
-        # 兼容历史 OpenAI 模型名，自动替换为 Gemini 默认模型
-        legacy_openai_prefixes = ("gpt-", "o1", "o3", "text-")
-        if name.lower().startswith(legacy_openai_prefixes):
-            logger.warning(
-                f"检测到历史模型名 {name}，已自动替换为 Gemini 默认模型 {Config.GEMINI_CHAT_MODEL}"
-            )
             return Config.GEMINI_CHAT_MODEL
         return name
 
@@ -93,11 +84,8 @@ class LLMFactory:
         cls, provider: str, provider_settings: dict, temperature, max_tokens, streaming
     ):
         provider = (provider or "").lower()
-        if provider == "openai":
-            # 兼容历史配置：openai provider 统一按 gemini 处理
-            provider = "gemini"
         if provider == "deepseek":
-            return cls._create_deekpseek(
+            return cls._create_deepseek(
                 provider_settings, temperature, max_tokens, streaming
             )
         if provider == "gemini":
@@ -109,8 +97,6 @@ class LLMFactory:
     @classmethod
     def _provider_defaults(cls, provider: str) -> dict:
         provider = (provider or "").strip().lower()
-        if provider == "openai":
-            provider = "gemini"
         if provider == "gemini":
             return {
                 "llm_model_name": Config.GEMINI_CHAT_MODEL,
@@ -221,7 +207,7 @@ class LLMFactory:
             )
 
     @classmethod
-    def _create_deekpseek(cls, settings, temperature, max_tokens, streaming):
+    def _create_deepseek(cls, settings, temperature, max_tokens, streaming):
         from langchain_deepseek import ChatDeepSeek
 
         model_name = settings.get("llm_model_name", Config.DEEPSEEK_CHAT_MODEL)
@@ -235,7 +221,7 @@ class LLMFactory:
             max_tokens=max_tokens,
             streaming=streaming,
         )
-        logger.info("已经创建DeepSeek LLM:{model_name}")
+        logger.info(f"已经创建DeepSeek LLM:{model_name}")
         return llm
 
     @classmethod
@@ -251,7 +237,7 @@ class LLMFactory:
             max_output_tokens=max_tokens,
             disable_streaming=not streaming,
         )
-        logger.info("已经创建Gemini LLM:{model_name}")
+        logger.info(f"已经创建Gemini LLM:{model_name}")
         return llm
 
     @classmethod
@@ -269,10 +255,10 @@ class LLMFactory:
             max_tokens=max_tokens,
             streaming=streaming,
         )
-        logger.info("已经创建Ollama LLM:{model_name}")
+        logger.info(f"已经创建Ollama LLM:{model_name}")
         return llm
 
 
-LLMFactory.register_provider("deepseek", LLMFactory._create_deekpseek)
+LLMFactory.register_provider("deepseek", LLMFactory._create_deepseek)
 LLMFactory.register_provider("gemini", LLMFactory._create_gemini)
 LLMFactory.register_provider("ollama", LLMFactory._create_ollama)

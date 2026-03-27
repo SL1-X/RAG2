@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}{{ document.name }} - 分块列表 - 智能问答系统{% endblock %}
+{% block title %}{{ document.name }} - Chunk List - Smart QA System{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -174,23 +174,23 @@
     <!-- 面包屑导航 -->
     <nav aria-label="breadcrumb">
         <ol class="breadcrumb">
-            <li class="breadcrumb-item"><a href="/">首页</a></li>
-            <li class="breadcrumb-item"><a href="/kb">知识库</a></li>
+            <li class="breadcrumb-item"><a href="/">Home</a></li>
+            <li class="breadcrumb-item"><a href="/kb">Knowledge Base</a></li>
             <li class="breadcrumb-item"><a href="/kb/{{ kb.id }}">{{ kb.name }}</a></li>
-            <li class="breadcrumb-item active">{{ document.name }} - 分块列表</li>
+            <li class="breadcrumb-item active">{{ document.name }} - Chunk List</li>
         </ol>
     </nav>
 
-    <!-- 分块列表卡片 -->
+    <!-- Chunk List卡片 -->
     <div class="chunk-card">
         <div class="card-header d-flex justify-content-between align-items-center">
             <h5 class="mb-0">
                 <i class="bi bi-file-earmark-text me-2"></i>
-                {{ document.name }} - 分块列表
+                {{ document.name }} - Chunk List
             </h5>
             <a href="/kb/{{ kb.id }}" class="btn btn-secondary btn-sm d-flex align-items-center gap-1">
                 <i class="bi bi-arrow-left"></i>
-                <span>返回文档列表</span>
+                <span>Back to Documents</span>
             </a>
         </div>
         <div class="card-body">
@@ -199,16 +199,16 @@
                 <div class="row">
                     <div class="col-md-6">
                         <div class="doc-info-item">
-                            <span class="doc-info-label">文档名称：</span>
+                            <span class="doc-info-label">Document Name:</span>
                             <span class="font-medium">{{ document.name }}</span>
                         </div>
                         <div class="doc-info-item">
-                            <span class="doc-info-label">文档状态：</span>
+                            <span class="doc-info-label">Document Status:</span>
                             {% set status_map = {
-                                'completed': '已完成',
-                                'processing': '处理中',
-                                'failed': '失败',
-                                'pending': '待处理'
+                                'completed': 'Completed',
+                                'processing': 'Processing',
+                                'failed': 'Failed',
+                                'pending': 'Pending'
                             } %}
                             <span class="badge badge-status bg-{{ 'success' if document.status == 'completed' else 'warning' if document.status == 'processing' else 'danger' if document.status == 'failed' else 'secondary' }}">
                                 {{ status_map.get(document.status, document.status) }}
@@ -217,26 +217,26 @@
                     </div>
                     <div class="col-md-6">
                         <div class="doc-info-item">
-                            <span class="doc-info-label">分块数量：</span>
+                            <span class="doc-info-label">Chunk Count:</span>
                             <span class="font-medium">{{ chunks|length }}</span>
                         </div>
                         <div class="doc-info-item">
-                            <span class="doc-info-label">文件大小：</span>
+                            <span class="doc-info-label">File Size:</span>
                             <span class="font-medium">{{ "%.2f"|format(document.file_size / 1024) }} KB</span>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- 分块列表 -->
+            <!-- Chunk List -->
             {% if chunks %}
             <div class="table-responsive">
                 <table class="table table-hover chunk-table">
                     <thead>
                         <tr>
-                            <th style="width: 80px;">序号</th>
-                            <th style="width: 200px;">分块ID</th>
-                            <th>内容</th>
+                            <th style="width: 80px;">No.</th>
+                            <th style="width: 200px;">Chunk ID</th>
+                            <th>Content</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -252,9 +252,9 @@
                                 <div class="chunk-content">
                                     {{ chunk.content }}
                                 </div>
-                                <button class="btn copy-btn btn-link p-0 mt-2" data-chunk-id="{{ chunk.id }}" data-chunk-content="{{ chunk.content|replace('"', '&quot;')|replace("'", "&#39;")|replace('\n', '&#10;') }}" onclick="copyChunkContent(event)" aria-label="复制分块内容">
+                                <button class="btn copy-btn btn-link p-0 mt-2" data-chunk-id="{{ chunk.id }}" data-chunk-content="{{ chunk.content|replace('"', '&quot;')|replace("'", "&#39;")|replace('\n', '&#10;') }}" onclick="copyChunkContent(event)" aria-label="Copy chunk content">
                                     <i class="bi bi-clipboard me-1"></i>
-                                    <span>复制</span>
+                                    <span>Copy</span>
                                 </button>
                             </td>
                         </tr>
@@ -267,8 +267,8 @@
                 <div class="empty-state-icon">
                     <i class="bi bi-inbox"></i>
                 </div>
-                <p class="empty-state-text">该文档还没有分块数据</p>
-                <p class="empty-state-subtext">请确保文档已处理完成（状态为 completed）</p>
+                <p class="empty-state-text">No chunk data for this document yet</p>
+                <p class="empty-state-subtext">Please ensure the document has been processed (status: completed)</p>
             </div>
             {% endif %}
         </div>
@@ -278,11 +278,11 @@
 
 {% block extra_js %}
 <script>
-// 定义一个函数用于复制分块内容
+// 定义一个函数用于Copy chunk content
 function copyChunkContent(event) {
     // 获取被点击的按钮元素
     const btn = event.target.closest('button');
-    // 获取分块ID（可用于后续拓展）
+    // 获取Chunk ID（可用于后续拓展）
     const chunkId = btn.getAttribute('data-chunk-id');
     // 获取分块内容（含HTML实体编码）
     let content = btn.getAttribute('data-chunk-content');
@@ -294,8 +294,8 @@ function copyChunkContent(event) {
     navigator.clipboard.writeText(content).then(function() {
         // 成功复制后：先保存按钮原始显示内容
         const originalHTML = btn.innerHTML;
-        // 修改按钮显示为已复制样式
-        btn.innerHTML = '<i class="bi bi-check"></i> 已复制';
+        // 修改按钮显示为Copied样式
+        btn.innerHTML = '<i class="bi bi-check"></i> Copied';
         btn.classList.add('text-success');
 
         // 2秒后恢复按钮为原始内容和样式
@@ -304,9 +304,9 @@ function copyChunkContent(event) {
             btn.classList.remove('text-success');
         }, 2000);
     }).catch(function(err) {
-        // 如果写入剪贴板失败，打印错误并弹窗提示
-        console.error('复制失败:', err);
-        alert('复制失败，请手动复制');
+        // 如果写入剪贴板Failed，打印错误并弹窗提示
+        console.error('Copy failed:', err);
+        alert('Copy failed, please copy manually.');
     });
 }
 </script>

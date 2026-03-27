@@ -15,7 +15,7 @@ class User(BaseModel):
     username = Column(String(64), nullable=False, unique=True, index=True)
     # username: Mapped[str] = mapped_column(String(100), nullable=False)
     # 邮箱
-    email = Column(String(128), nullable=True, unique=True, index=True)
+    email = Column(String(128), nullable=False, unique=True, index=True)
     # 密码哈希字符
     password_hash = Column(String(255), nullable=False)
     # 是否激活 默认为激活 不可为空

@@ -6,12 +6,17 @@ from app.services.parser_service import parser_service
 from app.services.vector_service import vector_service
 from app.config import Config
 from app.models.knowledgebase import Knowledgebase
+from app.models.parent_chunk import ParentChunk
 import uuid
 from app.utils.text_splitter import TextSplitter
 from concurrent.futures import ThreadPoolExecutor
 from langchain_core.documents import Document
 import re
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+from pathlib import Path
+import pickle
+import time
+import tempfile
 
 
 class DocumentService(BaseService[DocumentModel]):
@@ -150,6 +155,13 @@ class DocumentService(BaseService[DocumentModel]):
                     )
                 except Exception as e:
                     self.logger.warning(f"删除向量数据库失败:{e}")
+                try:
+                    with self.transaction() as session:
+                        session.query(ParentChunk).filter(
+                            ParentChunk.doc_id == doc_id
+                        ).delete(synchronize_session=False)
+                except Exception as e:
+                    self.logger.warning(f"删除父块映射失败:{e}")
 
             self.logger.info(f"文档{doc_id}状态已经更新为processing状态了")
             # 从存储中下载文件内容
@@ -159,8 +171,6 @@ class DocumentService(BaseService[DocumentModel]):
             self.logger.info(f"加载到{len(langchain_docs)}个文档")
             if not langchain_docs:
                 raise ValueError(f"未能抽取到任何文本内容")
-            if not self._is_english_document(langchain_docs):
-                raise ValueError("当前系统仅支持英文文档，请上传英文内容后重试。")
             # 创建文本的分块器，指定知识库参数
             parent_splitter = TextSplitter(
                 chunk_size=kb_chunk_size, chunk_overlap=kb_chunk_overlap
@@ -175,7 +185,7 @@ class DocumentService(BaseService[DocumentModel]):
                 chunk_size=child_chunk_size,
                 chunk_overlap=child_chunk_overlap,
                 length_function=len,
-                separators=["\n\n", "\n", ". ", "! ", "? ", "; ", ", ", " ", ""],
+                separators=["\n\n", "\n", ". ", "? ", "! ", " ", ""],
             )
             self.logger.info(
                 f"父子分层切分参数: parent_size={kb_chunk_size}, parent_overlap={kb_chunk_overlap}, "
@@ -184,12 +194,21 @@ class DocumentService(BaseService[DocumentModel]):
             # 初始化一个列表用于存放默认换后的langchain document对象
             documents = []
             chunk_ids = []
+            parent_chunk_rows = []
             child_counter = 0
             for parent_idx, parent in enumerate(parent_chunks):
                 parent_text = (parent.get("text") or "").strip()
                 if not parent_text:
                     continue
                 parent_id = f"{doc_id}_p_{parent_idx}"
+                parent_chunk_rows.append(
+                    ParentChunk(
+                        parent_id=parent_id,
+                        kb_id=kb_id,
+                        doc_id=doc_id,
+                        content=parent_text,
+                    )
+                )
                 child_texts = child_splitter.split_text(parent_text)
                 for child_idx, child_text in enumerate(child_texts):
                     child_text = (child_text or "").strip()
@@ -208,7 +227,6 @@ class DocumentService(BaseService[DocumentModel]):
                             "parent_id": parent_id,  # 父分块ID（关联键）
                             "parent_chunk_index": parent_idx,  # 父分块序号
                             "child_chunk_index": child_idx,  # 父分块内子序号
-                            "parent_content": parent_text,  # 父分块正文（命中后回填上下文）
                             "doc_lang": "en",  # 文档语言
                         },
                     )
@@ -222,6 +240,12 @@ class DocumentService(BaseService[DocumentModel]):
             vector_service.add_documents(
                 collection_name=collection_name, documents=documents, ids=chunk_ids
             )
+            with self.transaction() as session:
+                session.query(ParentChunk).filter(
+                    ParentChunk.doc_id == doc_id
+                ).delete(synchronize_session=False)
+                session.add_all(parent_chunk_rows)
+            self._rebuild_and_persist_keyword_index(collection_name)
             with self.transaction() as session:
                 doc = (
                     session.query(DocumentModel)
@@ -276,6 +300,62 @@ class DocumentService(BaseService[DocumentModel]):
         base = max(20, int(parent_overlap or 0) // 4)
         return max(20, min(child_chunk_size // 3, base))
 
+    @staticmethod
+    def _keyword_index_file_path(collection_name: str) -> Path:
+        safe_name = re.sub(r"[^A-Za-z0-9_.-]", "_", str(collection_name or "default"))
+        index_dir = Path(Config.BASE_DIR) / "storages" / "keyword_index"
+        index_dir.mkdir(parents=True, exist_ok=True)
+        return index_dir / f"{safe_name}.pkl"
+
+    @staticmethod
+    def _tokenize_for_keyword(text: str):
+        text = (text or "").strip().lower()
+        if not text:
+            return []
+        return re.findall(r"\b\w+\b", text)
+
+    def _rebuild_and_persist_keyword_index(self, collection_name: str) -> None:
+        vector_store = vector_service.get_or_create_collection(collection_name)
+        results = vector_store._collection.get(include=["documents", "metadatas"])
+        ids = results.get("ids") or []
+        chroma_documents = results.get("documents") or []
+        metadatas = results.get("metadatas") or []
+
+        docs_payload = []
+        tokenized_docs = []
+        for _id, chroma_document, meta in zip(ids, chroma_documents, metadatas):
+            meta = meta or {}
+            node_type = str(meta.get("node_type") or "")
+            if node_type and node_type != "child":
+                continue
+            text = chroma_document or ""
+            docs_payload.append(
+                {
+                    "page_content": text,
+                    "metadata": meta,
+                }
+            )
+            tokenized_docs.append(self._tokenize_for_keyword(text))
+
+        payload = {
+            "collection_name": collection_name,
+            "docs": docs_payload,
+            "tokenized_docs": tokenized_docs,
+            "doc_count": len(docs_payload),
+            "total_count": len(ids),
+            "saved_at": time.time(),
+        }
+        index_file = self._keyword_index_file_path(collection_name)
+        with tempfile.NamedTemporaryFile(
+            mode="wb", dir=index_file.parent, delete=False, suffix=".tmp"
+        ) as f:
+            pickle.dump(payload, f, protocol=pickle.HIGHEST_PROTOCOL)
+            tmp_file = f.name
+        os.replace(tmp_file, index_file)
+        self.logger.info(
+            f"BM25索引重建并持久化完成:{collection_name},child_chunks={len(docs_payload)},file={index_file}"
+        )
+
     def delete(self, doc_id):
         """
         删除文档的时候，要删除向量数据库中的向量数据，上传的文件，删除数据库里的文档数据
@@ -294,6 +374,11 @@ class DocumentService(BaseService[DocumentModel]):
             vector_service.delete_documents(
                 collection_name=collection_name, filter={"doc_id": doc_id}
             )
+            with self.transaction() as session:
+                session.query(ParentChunk).filter(ParentChunk.doc_id == doc_id).delete(
+                    synchronize_session=False
+                )
+            self._rebuild_and_persist_keyword_index(collection_name)
             self.logger.info(f"已经删除文档{doc_id}的向量数据")
         except Exception as e:
             self.logger.warning(f"删除向量数据库失败:{str(e)}")

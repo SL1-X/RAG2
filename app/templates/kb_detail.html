@@ -1,10 +1,10 @@
 {% extends "base.html" %}
 
-{% block title %}{{ kb.name }} - 智能问答系统{% endblock %}
+{% block title %}{{ kb.name }} - Smart QA System{% endblock %}
 
 {% block extra_css %}
 <style>
-    /* 文档管理页面样式 */
+    /* Document Management页面样式 */
     .doc-card {
         border-radius: 12px;
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
@@ -213,8 +213,8 @@
     <!-- 面包屑导航 -->
     <nav aria-label="breadcrumb">
         <ol class="breadcrumb">
-            <li class="breadcrumb-item"><a href="/">首页</a></li>
-            <li class="breadcrumb-item"><a href="/kb">知识库</a></li>
+            <li class="breadcrumb-item"><a href="/">Home</a></li>
+            <li class="breadcrumb-item"><a href="/kb">Knowledge Base</a></li>
             <li class="breadcrumb-item active">{{ kb.name }}</li>
         </ol>
     </nav>
@@ -223,49 +223,49 @@
         <div class="card-header d-flex justify-content-between align-items-center">
             <h5 class="mb-0">
                 <i class="bi bi-signpost-split me-2"></i>
-                文档级导航
+                Document Navigation
             </h5>
             <button id="refreshNavBtn" class="btn btn-outline-primary btn-sm" onclick="loadNavigation(true)">
-                <i class="bi bi-arrow-clockwise me-1"></i>刷新导航
+                <i class="bi bi-arrow-clockwise me-1"></i>Refresh Navigation
             </button>
         </div>
         <div class="card-body">
             <div class="nav-meta mb-2" id="navStats"></div>
             <div id="navLoading" class="nav-loading">
-                <i class="bi bi-hourglass-split me-1"></i> 正在生成目录、时间线、主题聚类和关键问题建议...
+                <i class="bi bi-hourglass-split me-1"></i> Generating TOC, timeline, topic clusters, and key question suggestions...
             </div>
             <div id="navError" class="alert alert-warning d-none mb-2"></div>
             <div id="navGrid" class="nav-grid d-none">
                 <section class="nav-block">
-                    <h6><i class="bi bi-list-nested me-1"></i> 自动目录</h6>
+                    <h6><i class="bi bi-list-nested me-1"></i> Auto TOC</h6>
                     <div id="navToc"></div>
                 </section>
                 <section class="nav-block">
-                    <h6><i class="bi bi-calendar-event me-1"></i> 时间线</h6>
+                    <h6><i class="bi bi-calendar-event me-1"></i> Timeline</h6>
                     <div id="navTimeline"></div>
                 </section>
                 <section class="nav-block">
-                    <h6><i class="bi bi-diagram-3 me-1"></i> 主题聚类</h6>
+                    <h6><i class="bi bi-diagram-3 me-1"></i> Topic Clusters</h6>
                     <div id="navThemes"></div>
                 </section>
                 <section class="nav-block">
-                    <h6><i class="bi bi-patch-question me-1"></i> 关键问题建议</h6>
+                    <h6><i class="bi bi-patch-question me-1"></i> Suggested Questions</h6>
                     <div id="navQuestions"></div>
                 </section>
             </div>
         </div>
     </div>
 
-    <!-- 文档管理卡片 -->
+    <!-- Document Management卡片 -->
     <div class="doc-card">
         <div class="card-header d-flex justify-content-between align-items-center">
             <h5 class="mb-0">
                 <i class="bi bi-file-earmark me-2"></i>
-                文档管理
+                Document Management
             </h5>
             <button class="btn btn-primary btn-sm d-flex align-items-center gap-1" data-bs-toggle="modal" data-bs-target="#uploadModal">
                 <i class="bi bi-upload"></i>
-                <span>上传文档</span>
+                <span>Upload Document</span>
             </button>
         </div>
         <div class="card-body">
@@ -275,11 +275,11 @@
                     <table class="table table-hover doc-table">
                         <thead>
                             <tr>
-                                <th>文档名称</th>
-                                <th>状态</th>
-                                <th>块数</th>
-                                <th>文件大小</th>
-                                <th>操作</th>
+                                <th>Document Name</th>
+                                <th>Status</th>
+                                <th>Chunks</th>
+                                <th>File Size</th>
+                                <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -293,10 +293,10 @@
                                 </td>
                                 <td>
                                     {% set status_map = {
-                                    'completed': '已完成',
-                                    'processing': '处理中',
-                                    'failed': '失败',
-                                    'pending': '待处理'
+                                    'completed': 'Completed',
+                                    'processing': 'Processing',
+                                    'failed': 'Failed',
+                                    'pending': 'Pending'
                                     } %}
                                     <span class="badge badge-status bg-{{ 'success' if doc.status == 'completed' else 'warning' if doc.status == 'processing' else 'danger' if doc.status == 'failed' else 'secondary' }}">
                                         {{ status_map.get(doc.status, doc.status) }}
@@ -307,30 +307,30 @@
                                 <td>
                                     <div class="d-flex gap-1">
                                         {% if doc.status == 'completed' %}
-                                        <a href="/documents/{{ doc.id }}/chunks" class="btn btn-action btn-info" aria-label="查看分块">
+                                        <a href="/documents/{{ doc.id }}/chunks" class="btn btn-action btn-info" aria-label="View Chunks">
                                             <i class="bi bi-list-ul me-1"></i>
-                                            <span>查看分块</span>
+                                            <span>View Chunks</span>
                                         </a>
                                         {% endif %}
                                         {% if doc.status == 'pending' %}
-                                        <button class="btn btn-action btn-primary" onclick="processDoc('{{ doc.id }}', '{{ doc.name }}')" aria-label="处理">
+                                        <button class="btn btn-action btn-primary" onclick="processDoc('{{ doc.id }}', '{{ doc.name }}')" aria-label="Process">
                                             <i class="bi bi-play-circle me-1"></i>
-                                            <span>处理</span>
+                                            <span>Process</span>
                                         </button>
                                         {% elif doc.status in ['completed', 'failed'] %}
-                                        <button class="btn btn-action btn-warning" onclick="processDoc('{{ doc.id }}', '{{ doc.name }}')" aria-label="重新处理">
+                                        <button class="btn btn-action btn-warning" onclick="processDoc('{{ doc.id }}', '{{ doc.name }}')" aria-label="Reprocess">
                                             <i class="bi bi-arrow-clockwise me-1"></i>
-                                            <span>重新处理</span>
+                                            <span>Reprocess</span>
                                         </button>
                                         {% elif doc.status == 'processing' %}
-                                        <button class="btn btn-action btn-secondary" disabled aria-label="处理中">
+                                        <button class="btn btn-action btn-secondary" disabled aria-label="Processing">
                                             <i class="bi bi-hourglass-split me-1"></i>
-                                            <span>处理中</span>
+                                            <span>Processing</span>
                                         </button>
                                         {% endif %}
-                                        <button class="btn btn-action btn-danger" onclick="deleteDoc('{{ doc.id }}', '{{ doc.name }}')" aria-label="删除">
+                                        <button class="btn btn-action btn-danger" onclick="deleteDoc('{{ doc.id }}', '{{ doc.name }}')" aria-label="Delete">
                                             <i class="bi bi-trash me-1"></i>
-                                            <span>删除</span>
+                                            <span>Delete</span>
                                         </button>
                                     </div>
                                 </td>
@@ -342,16 +342,16 @@
 
                 <!-- 分页控件 -->
                 {% if pagination and pagination.total > pagination.page_size %}
-                <nav aria-label="文档列表分页" class="mt-4">
+                <nav aria-label="Document list pagination" class="mt-4">
                     <ul class="pagination justify-content-center">
                         {% set current_page = pagination.page %}
                         {% set total_pages = (pagination.total + pagination.page_size - 1) // pagination.page_size %}
 
-                        <!-- 上一页 -->
+                        <!-- Previous -->
                         <li class="page-item {% if current_page <= 1 %}disabled{% endif %}">
                             <a class="page-link" href="?page={{ current_page - 1 }}&page_size={{ pagination.page_size }}" {% if current_page <= 1 %}tabindex="-1" aria-disabled="true"{% endif %}>
                                 <i class="bi bi-chevron-left"></i>
-                                <span class="ms-1">上一页</span>
+                                <span class="ms-1">Previous</span>
                             </a>
                         </li>
 
@@ -389,16 +389,16 @@
                         </li>
                         {% endif %}
 
-                        <!-- 下一页 -->
+                        <!-- Next -->
                         <li class="page-item {% if current_page >= total_pages %}disabled{% endif %}">
                             <a class="page-link" href="?page={{ current_page + 1 }}&page_size={{ pagination.page_size }}" {% if current_page >= total_pages %}tabindex="-1" aria-disabled="true"{% endif %}>
-                                <span class="me-1">下一页</span>
+                                <span class="me-1">Next</span>
                                 <i class="bi bi-chevron-right"></i>
                             </a>
                         </li>
                     </ul>
                     <div class="text-center text-muted small mt-2">
-                        共 {{ pagination.total }} 个文档，第 {{ current_page }} / {{ total_pages }} 页
+                        Total {{ pagination.total }} documents, page {{ current_page }} / {{ total_pages }}
                     </div>
                 </nav>
                 {% endif %}
@@ -407,7 +407,7 @@
                     <div class="empty-state-icon">
                         <i class="bi bi-inbox"></i>
                     </div>
-                    <p class="empty-state-text">还没有文档，点击上方按钮上传文档</p>
+                    <p class="empty-state-text">No documents yet. Click the button above to upload one.</p>
                 </div>
                 {% endif %}
             </div>
@@ -415,32 +415,32 @@
     </div>
 </div>
 
-<!-- 上传文档模态框 -->
+<!-- Upload文档模态框 -->
 <div class="modal fade" id="uploadModal" tabindex="-1" aria-labelledby="uploadModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title" id="uploadModalLabel">上传文档</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+                <h5 class="modal-title" id="uploadModalLabel">Upload Document</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <form id="uploadForm" onsubmit="uploadDocument(event)" enctype="multipart/form-data">
                 <div class="modal-body">
                     <div class="mb-4">
-                        <label for="fileInput" class="form-label">选择文件</label>
+                        <label for="fileInput" class="form-label">Choose File</label>
                         <input type="file" class="form-control" id="fileInput" name="file" accept=".pdf,.docx,.txt,.md" required>
-                        <div class="form-text">支持 PDF、DOCX、TXT、MD 格式</div>
+                        <div class="form-text">Supports PDF, DOCX, TXT, and MD formats</div>
                     </div>
                     <div class="mb-4">
-                        <label for="nameInput" class="form-label">文档名称（可选）</label>
-                        <input type="text" class="form-control" id="nameInput" name="name" placeholder="留空使用文件名">
+                        <label for="nameInput" class="form-label">Document Name (optional)</label>
+                        <input type="text" class="form-control" id="nameInput" name="name" placeholder="Leave empty to use file name">
                     </div>
                     <div id="uploadProgress" class="progress d-none">
                         <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 100%"></div>
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
-                    <button type="submit" class="btn btn-primary">上传</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Upload</button>
                 </div>
             </form>
         </div>
@@ -464,15 +464,15 @@
     }
     function renderToc(toc) {
         if (!toc || !toc.length) {
-            return `<p class="text-muted small mb-0">暂无目录结果</p>`;
+            return `<p class="text-muted small mb-0">No TOC results yet</p>`;
         }
         return toc
             .map((doc) => {
                 const headings = (doc.headings || []).slice(0, 5).map((h) => esc(h));
                 return `
                 <div class="mb-2">
-                    <div class="fw-semibold small">${esc(doc.doc_name || "未知文档")}</div>
-                    ${renderSimpleList(headings, "未识别到章节标题")}
+                    <div class="fw-semibold small">${esc(doc.doc_name || "Unknown document")}</div>
+                    ${renderSimpleList(headings, "No headings detected")}
                 </div>
                 `;
             })
@@ -480,17 +480,17 @@
     }
     function renderTimeline(timeline) {
         if (!timeline || !timeline.length) {
-            return `<p class="text-muted small mb-0">暂无时间线事件</p>`;
+            return `<p class="text-muted small mb-0">No timeline events yet</p>`;
         }
         const items = timeline.slice(0, 12).map((item) => {
             return `<strong>${esc(item.date_display || item.date)}</strong> · ${esc(item.summary || "")}
                 <div class="nav-meta">${esc(item.doc_name || "")}</div>`;
         });
-        return renderSimpleList(items, "暂无时间线事件");
+        return renderSimpleList(items, "No timeline events yet");
     }
     function renderThemes(themes) {
         if (!themes || !themes.length) {
-            return `<p class="text-muted small mb-0">暂无可用主题</p>`;
+            return `<p class="text-muted small mb-0">No available topics yet</p>`;
         }
         return themes
             .slice(0, 6)
@@ -499,7 +499,7 @@
                 const snippet = (theme.snippets || [])[0];
                 return `
                 <div class="mb-2">
-                    <div class="fw-semibold small">${esc(theme.title || "主题")}</div>
+                    <div class="fw-semibold small">${esc(theme.title || "Topic")}</div>
                     <div class="nav-meta mb-1">${kw}</div>
                     <div class="small">${esc(snippet?.text || "")}</div>
                 </div>
@@ -509,7 +509,7 @@
     }
     function renderQuestions(questions) {
         const items = (questions || []).slice(0, 10).map((q) => esc(q));
-        return renderSimpleList(items, "暂无建议问题");
+        return renderSimpleList(items, "No suggested questions yet");
     }
     async function loadNavigation(forceRefresh = false) {
         const loadingEl = document.getElementById("navLoading");
@@ -527,7 +527,7 @@
             const response = await fetch(url);
             const result = await response.json();
             if (!response.ok || result.code !== 200) {
-                throw new Error(result.message || "加载导航失败");
+                throw new Error(result.message || "Failed to load navigation");
             }
             const data = result.data || {};
             document.getElementById("navToc").innerHTML = renderToc(data.toc || []);
@@ -537,12 +537,12 @@
                 data.suggested_questions || []
             );
             const stats = data.stats || {};
-            statsEl.textContent = `覆盖 ${Number(stats.docs || 0)} 个文档 / ${Number(
+            statsEl.textContent = `Coverage: ${Number(stats.docs || 0)} docs / ${Number(
                 stats.chunks || 0
-            )} 个分块`;
+            )} chunks`;
             gridEl.classList.remove("d-none");
         } catch (error) {
-            errorEl.textContent = error.message || "加载导航失败";
+            errorEl.textContent = error.message || "Failed to load navigation";
             errorEl.classList.remove("d-none");
             statsEl.textContent = "";
         } finally {
@@ -571,10 +571,10 @@
                 location.reload()
             } else {
                 const error = await response.json()
-                alert("上传失败:" + error.message)
+                alert("UploadFailed:" + error.message)
             }
         } catch (error) {
-            alert("上传失败:" + error.message)
+            alert("UploadFailed:" + error.message)
         } finally {
             processDiv.classList.add('d-none')
             submitBtn.disabled = false
@@ -584,31 +584,31 @@
         try{
             const response = await fetch(`/api/v1/documents/${docId}/process`,{method:"POST"})
             if (response.ok){
-                alert("文件处理处理已经提交，请稍后刷新页面查看处理状态")
+                alert("Document processing job submitted. Please refresh later to check status.")
                 setTimeout(()=>location.reload(),1000)
             }else{
                 const error = await response.json()
-                alert("处理失败:"+error.message)
+                alert("ProcessFailed:"+error.message)
             }
         }catch(error){
-            alert("处理失败"+error.message)
+            alert("ProcessFailed"+error.message)
         }
     }
     async function deleteDoc(docId,docName){
-        if (!confirm(`确定要删除文档${docName}吗？此操作不可恢复`)){
+        if (!confirm(`Are you sure you want to delete document ${docName}? This action cannot be undone`)){
             return 
         }
           try{
             const response = await fetch(`/api/v1/documents/${docId}`,{method:"DELETE"})
             if (response.ok){
-                alert("文档删除成功")
+                alert("Document deleted successfully")
                 location.reload()
             }else{
                 const error = await response.json()
-                alert("文档删除失败:"+error.message)
+                alert("Document deletion failed: " + error.message)
             }
         }catch(error){
-            alert("文档删除失败"+error.message)
+            alert("Document deletion failed: " + error.message)
         }
     }
     document.addEventListener("DOMContentLoaded", function () {

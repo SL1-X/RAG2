@@ -33,12 +33,15 @@ VALID_PIPELINE_MODES = frozenset(
 )
 
 _TRIPLE_BRANCH_ORDER = ("vector", "keyword", "hybrid")
-STRICT_RAG_REFUSAL = "抱歉，当前检索到的文档中没有足够依据回答该问题。"
+DEFAULT_REFUSAL_EN = (
+    "Sorry, there is not enough evidence in the retrieved documents to answer this question."
+)
+DEFAULT_REFUSAL_ZH = "抱歉，当前检索到的文档中没有足够依据回答该问题。"
 
 
 class RAGService:
     def __init__(self):
-        pass
+        self.executor = ThreadPoolExecutor(max_workers=12, thread_name_prefix="rag-worker")
 
     @staticmethod
     def _as_float(value, default):
@@ -74,6 +77,13 @@ class RAGService:
         meta = doc.metadata or {}
         return str(meta.get("chunk_id") or meta.get("id") or meta.get("doc_id") or id(doc))
 
+    @staticmethod
+    def _contains_cjk(text: str) -> bool:
+        return bool(re.search(r"[\u4e00-\u9fff]", text or ""))
+
+    def _build_refusal_message(self, question: str = "") -> str:
+        return DEFAULT_REFUSAL_ZH if self._contains_cjk(question) else DEFAULT_REFUSAL_EN
+
     def _should_rewrite_query(self, question: str, history, settings: dict) -> bool:
         if not history:
             return False
@@ -108,9 +118,103 @@ class RAGService:
         needs_reference_resolution = any(h in q.lower() for h in pronoun_hints)
         return short_question or needs_reference_resolution
 
+    def _classify_intent(self, question: str, settings: dict, history=None) -> str:
+        """
+        利用大模型对用户输入进行极速意图分类：
+        返回: 'chitchat' (闲聊), 'summary' (总结全文), 'qa' (具体知识点问答)
+        """
+        q = (question or "").strip()
+        if len(q) <= 2:
+            return "chitchat"
+
+        try:
+            llm = LLMFactory.create_llm(
+                settings, role="rag", temperature=0.0, max_tokens=10, streaming=False
+            )
+            prompt = ChatPromptTemplate.from_messages(
+                [
+                    (
+                        "system",
+                        "你是一个意图识别引擎。请根据用户的输入，严格输出以下三个英文单词之一，不要有任何额外标点或解释：\n"
+                        "1. chitchat: 用户在进行日常寒暄、打招呼、或者提问与文档无关的常识（如“你好”、“你是谁”、“讲个笑话”）。\n"
+                        "2. summary: 用户要求总结、概括、提炼整篇文章的大意或核心观点（如“这篇文章讲了什么”、“总结一下”）。\n"
+                        "3. qa: 用户在询问文档中的具体细节、特定事实、机制或做法（如“内存溢出怎么解决”、“什么是RAG”）。",
+                    ),
+                    ("human", "用户输入：{question}\n\n意图单词："),
+                ]
+            )
+            chain = prompt | llm
+            out = chain.invoke({"question": question})
+            intent = (
+                out.content if getattr(out, "content", None) else str(out)
+            ).strip().lower()
+
+            if "chitchat" in intent:
+                return "chitchat"
+            if "summary" in intent:
+                return "summary"
+            return "qa"
+        except Exception as e:
+            logger.warning(f"意图识别失败，降级为常规QA意图: {e}")
+            return "qa"
+
+    def _expand_query_for_retrieval(self, question: str, settings: dict) -> list[str]:
+        """
+        多查询扩展：将口语化的提问改写为 3 个适合向量检索的标准化关键词句。
+        """
+        q = (question or "").strip()
+        if not q:
+            return [question]
+        try:
+            llm = LLMFactory.create_llm(
+                settings, role="rewrite", temperature=0.2, max_tokens=150, streaming=False
+            )
+            prompt = ChatPromptTemplate.from_messages(
+                [
+                    (
+                        "system",
+                        "你是一个专业的检索词优化专家。用户的提问可能口语化或不完整。\n"
+                        "请从不同角度生成 3 个相关的搜索短语或关键词组合，以帮助向量数据库最大化召回相关文档。\n"
+                        "每行输出一个查询，不要有序号，不要解释。",
+                    ),
+                    ("human", "原始提问：{question}\n\n扩写搜索词："),
+                ]
+            )
+            chain = prompt | llm
+            out = chain.invoke({"question": question})
+            text = (out.content if getattr(out, "content", None) else str(out)).strip()
+            queries = [line.strip("-*1234567890. ") for line in text.splitlines() if line.strip()]
+            queries = [item for item in queries if item]
+            if question not in queries:
+                queries.insert(0, question)
+            return queries[:4]
+        except Exception as e:
+            logger.warning(f"查询扩展失败，回退到原问题: {e}")
+            return [question]
+
     def _get_rag_prompt(self, settings: dict) -> ChatPromptTemplate:
-        rag_system_prompt = settings.get("rag_system_prompt")
-        rag_query_prompt = settings.get("rag_query_prompt")
+        rag_system_prompt = settings.get("rag_system_prompt") or ""
+        language_guard = (
+            "You are a professional document QA assistant.\n"
+            "Use the provided context to answer the user's question.\n\n"
+            "CRITICAL INSTRUCTIONS:\n"
+            "1. You MUST answer in the EXACT SAME LANGUAGE as the user's latest question.\n"
+            "2. Preserve domain terminology in its original form unless the user explicitly asks for translation.\n"
+            "3. If the answer is not supported by context, explicitly say evidence is insufficient in the same language."
+        )
+        rag_system_prompt = (
+            f"{rag_system_prompt}\n\n{language_guard}".strip()
+            if rag_system_prompt
+            else language_guard
+        )
+        rag_query_prompt = (settings.get("rag_query_prompt") or "").strip()
+        rag_query_guard = (
+            "Final output language rule: answer in the same language as the user question. "
+            "Do not force Chinese."
+        )
+        rag_query_prompt = (
+            f"{rag_query_prompt}\n\n{rag_query_guard}" if rag_query_prompt else rag_query_guard
+        )
         return ChatPromptTemplate.from_messages(
             [("system", rag_system_prompt), ("human", rag_query_prompt)]
         )
@@ -217,16 +321,16 @@ class RAGService:
             )
 
         all_docs = [[] for _ in queries]
-        max_workers = min(4, max(1, len(queries)))
-        with ThreadPoolExecutor(max_workers=max_workers) as pool:
-            futures = {pool.submit(_run_one_query, q): idx for idx, q in enumerate(queries)}
-            for fut in as_completed(futures):
-                idx = futures[fut]
-                try:
-                    all_docs[idx] = fut.result() or []
-                except Exception as e:
-                    logger.warning(f"多查询召回子查询失败（忽略）：{e}")
-                    all_docs[idx] = []
+        futures = {
+            self.executor.submit(_run_one_query, q): idx for idx, q in enumerate(queries)
+        }
+        for fut in as_completed(futures):
+            idx = futures[fut]
+            try:
+                all_docs[idx] = fut.result() or []
+            except Exception as e:
+                logger.warning(f"多查询召回子查询失败（忽略）：{e}")
+                all_docs[idx] = []
 
         # 融合：优先多查询重复命中的片段，其次看最佳排名
         merged = {}
@@ -287,14 +391,32 @@ class RAGService:
     def _tokenize_for_citation(text: str) -> set[str]:
         if not text:
             return set()
-        tokens = re.findall(r"[A-Za-z0-9_]+|[\u4e00-\u9fff]", text.lower())
-        return {t for t in tokens if t and len(t.strip()) > 0}
+        text = str(text).lower()
+        tokens = set(re.findall(r"\b\w+\b", text))
+        stopwords = {
+            "the",
+            "a",
+            "an",
+            "is",
+            "are",
+            "and",
+            "or",
+            "of",
+            "to",
+            "in",
+            "for",
+            "on",
+            "with",
+            "this",
+            "that",
+        }
+        return tokens - stopwords
 
     @staticmethod
     def _split_answer_sentences(answer: str) -> list[str]:
         if not answer:
             return []
-        segments = re.findall(r"[^。！？!?；;\n]+(?:[。！？!?；;]+)?|\n+", answer)
+        segments = re.findall(r"[^。！？.!?；;\n]+(?:[。！？.!?；;]+)?|\n+", answer)
         if not segments:
             return [answer]
         return segments
@@ -306,6 +428,7 @@ class RAGService:
         """
         if not answer or not sources:
             return answer, []
+        answer = self._normalize_inline_citation_markers(answer)
         source_tokens = [
             self._tokenize_for_citation((src or {}).get("content", "")[:2200])
             for src in sources
@@ -319,12 +442,17 @@ class RAGService:
             if not seg or seg.isspace():
                 cited_segments.append(seg)
                 continue
-            if re.search(r"\[\^\d+\]\s*$", seg.rstrip()):
+            # 句子内只要已有任意引用标记（[^n]/[n]/列表形式），就不再二次注入。
+            existing = self._extract_citation_indexes(seg)
+            if existing:
+                for idx in existing:
+                    if 1 <= idx <= len(sources):
+                        used_indexes.add(idx)
                 cited_segments.append(seg)
                 continue
 
             core = seg.strip()
-            sentence_tokens = self._tokenize_for_citation(core)
+            sentence_tokens = self._tokenize_for_citation(core.lower())
             if len(sentence_tokens) < 2 or len(core) < 8:
                 cited_segments.append(seg)
                 continue
@@ -366,6 +494,83 @@ class RAGService:
         return cited_answer, citation_map
 
     @staticmethod
+    def _extract_citation_indexes(text: str) -> list[int]:
+        """
+        从文本中抽取引用索引，兼容：
+        - [^1]
+        - [1]
+        - [^1, ^2] / [1,2]
+        """
+        value = str(text or "")
+        if not value:
+            return []
+        out: list[int] = []
+        seen = set()
+        for m in re.finditer(r"\[([^\]]+)\]", value):
+            inside = m.group(1) or ""
+            nums = re.findall(r"\^?\s*(\d{1,3})\b", inside)
+            if not nums:
+                continue
+            for n in nums:
+                try:
+                    idx = int(n)
+                except Exception:
+                    continue
+                if idx <= 0 or idx in seen:
+                    continue
+                seen.add(idx)
+                out.append(idx)
+        return out
+
+    def _normalize_inline_citation_markers(self, answer: str) -> str:
+        """
+        统一引用格式为 [^n]：
+        - [1] -> [^1]
+        - [^1, ^2] / [1,2] -> [^1][^2]
+        """
+        text = str(answer or "")
+        if not text:
+            return text
+
+        def _repl(m):
+            inside = m.group(1) or ""
+            nums = re.findall(r"\^?\s*(\d{1,3})\b", inside)
+            if not nums:
+                return m.group(0)
+            ordered = []
+            seen = set()
+            for n in nums:
+                try:
+                    idx = int(n)
+                except Exception:
+                    continue
+                if idx <= 0 or idx in seen:
+                    continue
+                seen.add(idx)
+                ordered.append(idx)
+            if not ordered:
+                return m.group(0)
+            return "".join(f"[^{idx}]" for idx in ordered)
+
+        return re.sub(r"\[([^\]]+)\]", _repl, text)
+
+    @staticmethod
+    def _dedupe_inline_citations(answer: str) -> str:
+        """
+        规范化重复引用：
+        1) 合并连续重复的同一标记：[^1][^1] / [^1] [^1] -> [^1]
+        2) 合并“标点前后重复”场景：[^1]. [^1] -> [^1].
+        """
+        text = answer or ""
+        if not text:
+            return text
+        # 连续重复：[^1][^1]、[^1] [^1]
+        text = re.sub(r"(\[\^\d+\])(?:\s*\1)+", r"\1", text)
+        # 标点前后重复：[^1]. [^1] -> [^1].
+        text = re.sub(r"(\[\^\d+\])\s*([。！？.!?;,，；:：])\s*\1", r"\1\2", text)
+        return text
+
+    @staticmethod
     def _split_context_sections(context: str) -> list[tuple[int, str]]:
         if not context:
             return []
@@ -394,7 +599,7 @@ class RAGService:
         merged_context = self._merge_context_and_history(context, history)
         sections = self._split_context_sections(merged_context)
         if not sections:
-            return STRICT_RAG_REFUSAL
+            return self._build_refusal_message(question)
         # 控制 map 阶段成本
         max_sections = self._as_int(settings.get("summary_max_sections", 8), 8)
         max_sections = max(3, min(max_sections, 12))
@@ -444,34 +649,34 @@ class RAGService:
             return idx, text
 
         partial_summaries_by_idx = {}
-        map_workers = min(4, max(1, len(sections)))
-        with ThreadPoolExecutor(max_workers=map_workers) as pool:
-            futures = {pool.submit(_run_map_one, item): item[0] for item in sections}
-            for fut in as_completed(futures):
-                section_idx = futures[fut]
-                try:
-                    idx, text = fut.result()
-                    if text:
-                        partial_summaries_by_idx[idx] = text
-                except Exception as e:
-                    logger.warning(f"map摘要失败，跳过分段[{section_idx}]：{e}")
+        futures = {
+            self.executor.submit(_run_map_one, item): item[0] for item in sections
+        }
+        for fut in as_completed(futures):
+            section_idx = futures[fut]
+            try:
+                idx, text = fut.result()
+                if text:
+                    partial_summaries_by_idx[idx] = text
+            except Exception as e:
+                logger.warning(f"map摘要失败，跳过分段[{section_idx}]：{e}")
         partial_summaries = [
             partial_summaries_by_idx[i] for i, _ in sections if i in partial_summaries_by_idx
         ]
         if not partial_summaries:
-            return STRICT_RAG_REFUSAL
+            return self._build_refusal_message(question)
         reduce_prompt = ChatPromptTemplate.from_messages(
             [
                 (
                     "system",
                     "You are a grounded summarizer. Merge partial summaries into one final answer. "
                     "Keep only evidence-supported claims. Every key point must include citations [^n]. "
-                    "If evidence is insufficient, return exactly: " + STRICT_RAG_REFUSAL,
+                    "If evidence is insufficient, clearly state that in the same language as the user question.",
                 ),
                 (
                     "human",
                     "Question:\n{question}\n\nPartial summaries:\n{partials}\n\n"
-                    "Return format:\n1) 一句话总览\n2) 5-8条关键要点（每条含引用）\n3) 结论与适用边界（含引用）",
+                    "Return format:\n1) One-sentence overview\n2) 5-8 key points (each with citations)\n3) Conclusion and boundaries (with citations)",
                 ),
             ]
         )
@@ -484,34 +689,84 @@ class RAGService:
         chain = reduce_prompt | llm
         out = chain.invoke({"question": question, "partials": "\n\n".join(partial_summaries)})
         reduced = (out.content if getattr(out, "content", None) else str(out)).strip()
-        if not self._looks_truncated_summary(reduced) and not self._looks_too_brief_summary(
-            reduced
+        reduced_cut_by_limit = self._is_likely_cut_by_length_limit(out)
+        if (
+            not reduced_cut_by_limit
+            and not self._looks_truncated_summary(reduced)
+            and not self._looks_too_brief_summary(reduced)
         ):
             return reduced
 
-        logger.warning("总结 reduce 输出疑似截断，执行一次补全重试")
+        logger.warning("总结 reduce 输出疑似截断/过短，执行增强补全重试")
+        retry_max_tokens = max(1536, int(reduce_max_tokens * 1.5))
+        retry_llm = LLMFactory.create_llm(
+            settings,
+            role="rag",
+            max_tokens=retry_max_tokens,
+            temperature=min(self._as_float(settings.get("rag_llm_temperature", 0.7), 0.7), 0.35),
+        )
         retry_prompt = ChatPromptTemplate.from_messages(
             [
                 (
                     "system",
-                    "You are a grounded summarizer. Produce a complete and concise Chinese answer "
+                    "You are a grounded summarizer. Produce a complete and concise answer "
                     "strictly based on the provided partial summaries. Every key point must include citations [^n]. "
                     "Do not end with an unfinished phrase.",
                 ),
                 (
                     "human",
                     "Question:\n{question}\n\nPartial summaries:\n{partials}\n\n"
-                    "Output exactly:\n1) 一句话总览（完整句）\n2) 5-8条关键要点（每条含引用）\n3) 结论与适用边界（完整句，含引用）",
+                    "Output exactly:\n1) One-sentence overview (complete sentence)\n2) 5-8 key points (each with citations)\n3) Conclusion and boundaries (complete sentence, with citations)",
                 ),
             ]
         )
-        retry_chain = retry_prompt | llm
+        retry_chain = retry_prompt | retry_llm
         retry_out = retry_chain.invoke(
             {"question": question, "partials": "\n\n".join(partial_summaries)}
         )
         retried = (
             retry_out.content if getattr(retry_out, "content", None) else str(retry_out)
         ).strip()
+        retried_cut_by_limit = self._is_likely_cut_by_length_limit(retry_out)
+        if (
+            retried
+            and not retried_cut_by_limit
+            and not self._looks_truncated_summary(retried)
+            and not self._looks_too_brief_summary(retried)
+        ):
+            return retried
+
+        logger.warning("总结 reduce 重试后仍疑似不完整，执行一次续写补齐")
+        continue_prompt = ChatPromptTemplate.from_messages(
+            [
+                (
+                    "system",
+                    "You complete unfinished summaries. Continue from the existing draft without repeating completed content. "
+                    "Keep the same language as the question and keep citations [^n] for all key points.",
+                ),
+                (
+                    "human",
+                    "Question:\n{question}\n\nPartial summaries:\n{partials}\n\n"
+                    "Existing draft that may end abruptly:\n{draft}\n\n"
+                    "Continue only the missing tail until the answer is complete. "
+                    "End with a complete final sentence.",
+                ),
+            ]
+        )
+        continue_chain = continue_prompt | retry_llm
+        continue_out = continue_chain.invoke(
+            {
+                "question": question,
+                "partials": "\n\n".join(partial_summaries),
+                "draft": retried or reduced,
+            }
+        )
+        continued_tail = (
+            continue_out.content if getattr(continue_out, "content", None) else str(continue_out)
+        ).strip()
+        merged = "\n".join(x for x in [(retried or reduced), continued_tail] if x).strip()
+        if merged and not self._looks_truncated_summary(merged):
+            return merged
         return retried or reduced
 
     @staticmethod
@@ -565,13 +820,165 @@ class RAGService:
         return False
 
     @staticmethod
+    def _is_likely_cut_by_length_limit(output) -> bool:
+        meta = getattr(output, "response_metadata", None) or {}
+        if not isinstance(meta, dict):
+            return False
+        finish_reason = str(meta.get("finish_reason", "") or "").lower()
+        if any(key in finish_reason for key in ("max", "length", "token")):
+            return True
+        candidates = meta.get("candidates")
+        if isinstance(candidates, list):
+            for item in candidates:
+                if not isinstance(item, dict):
+                    continue
+                reason = str(item.get("finish_reason", "") or "").lower()
+                if any(key in reason for key in ("max", "length", "token")):
+                    return True
+        return False
+
+    @staticmethod
+    def _looks_truncated_answer(answer: str) -> bool:
+        text = (answer or "").strip()
+        if not text:
+            return True
+        if len(text) < 20:
+            return True
+        if text.count("```") % 2 == 1:
+            return True
+        if re.search(r"[，、：;；,:（(\-\*]\s*$", text):
+            return True
+        if re.search(r"(?:^|\n)\s*(?:[-*+]|\d+\.)\s*$", text):
+            return True
+        if "\n" not in text and not re.search(r"[。！？.!?](?:\s|\]|$)", text):
+            return True
+        return False
+
+    @staticmethod
+    def _looks_language_mismatch(question: str, answer: str) -> bool:
+        q = (question or "").strip()
+        a = (answer or "").strip()
+        if not q or not a:
+            return False
+        q_has_cjk = bool(re.search(r"[\u4e00-\u9fff]", q))
+        a_has_cjk = bool(re.search(r"[\u4e00-\u9fff]", a))
+        if q_has_cjk and not a_has_cjk:
+            return True
+        if (not q_has_cjk) and a_has_cjk:
+            return True
+        return False
+
+    def _continue_answer_if_truncated(
+        self,
+        *,
+        question: str,
+        context: str,
+        history,
+        settings: dict,
+        draft: str,
+        use_fallback: bool = False,
+    ) -> str:
+        draft_text = (draft or "").strip()
+        if not draft_text:
+            return draft_text
+        merged_context = self._merge_context_and_history(context, history)
+        llm = LLMFactory.create_llm(
+            settings,
+            role="rag",
+            max_tokens=max(
+                1280,
+                int(self._as_int(settings.get("rag_llm_max_tokens", 1024), 1024) * 1.5),
+            ),
+            temperature=min(self._as_float(settings.get("rag_llm_temperature", 0.7), 0.7), 0.4),
+            use_fallback=use_fallback,
+        )
+        prompt = ChatPromptTemplate.from_messages(
+            [
+                (
+                    "system",
+                    "You continue incomplete grounded answers. "
+                    "Use only the provided document context. "
+                    "Output must be in the same language as the user's question. "
+                    "Do not restart; only continue from where the draft stopped. "
+                    "Keep citation markers [^n] for key claims.",
+                ),
+                (
+                    "human",
+                    "Question:\n{question}\n\n"
+                    "Current incomplete draft:\n{draft}\n\n"
+                    "Document context:\n{context}\n\n"
+                    "Now provide only the missing continuation.",
+                ),
+            ]
+        )
+        chain = prompt | llm
+        out = chain.invoke({"question": question, "draft": draft_text, "context": merged_context})
+        tail = (out.content if getattr(out, "content", None) else str(out)).strip()
+        if not tail:
+            return draft_text
+        return f"{draft_text}\n{tail}".strip()
+
+    def _repair_answer_language(
+        self,
+        *,
+        question: str,
+        context: str,
+        history,
+        settings: dict,
+        answer: str,
+        use_fallback: bool = False,
+    ) -> str:
+        text = (answer or "").strip()
+        if not text:
+            return text
+        if not self._looks_language_mismatch(question, text):
+            return text
+        target = "Chinese" if self._contains_cjk(question) else "English"
+        merged_context = self._merge_context_and_history(context, history)
+        llm = LLMFactory.create_llm(
+            settings,
+            role="rag",
+            max_tokens=max(
+                1024,
+                self._as_int(settings.get("rag_llm_max_tokens", 1024), 1024),
+            ),
+            temperature=0.2,
+            use_fallback=use_fallback,
+        )
+        prompt = ChatPromptTemplate.from_messages(
+            [
+                (
+                    "system",
+                    "You are a grounded rewriter. "
+                    "Rewrite the answer into the target language without adding new facts. "
+                    "Preserve all citation markers [^n] exactly.",
+                ),
+                (
+                    "human",
+                    "User question:\n{question}\n\n"
+                    "Target language: {target}\n\n"
+                    "Document context:\n{context}\n\n"
+                    "Answer to rewrite:\n{answer}",
+                ),
+            ]
+        )
+        chain = prompt | llm
+        out = chain.invoke(
+            {"question": question, "target": target, "context": merged_context, "answer": text}
+        )
+        rewritten = (out.content if getattr(out, "content", None) else str(out)).strip()
+        return rewritten or text
+
+    @staticmethod
     def _is_refusal_answer(answer: str) -> bool:
         text = (answer or "").strip()
         if not text:
             return False
         text = re.sub(r"\[\^\d+\]", "", text).strip()
         refusal_prefixes = (
-            "抱歉，当前检索到的文档中没有足够依据回答该问题",
+            DEFAULT_REFUSAL_EN.rstrip("."),
+            "Sorry, there is not enough evidence",
+            DEFAULT_REFUSAL_ZH.rstrip("。"),
             "抱歉，当前的知识库文档中没有找到与该问题相关的信息",
         )
         return any(text.startswith(prefix) for prefix in refusal_prefixes)
@@ -582,7 +989,7 @@ class RAGService:
         sentence_clean = self._strip_inline_citations(sentence).strip()
         if not sentence_clean:
             return True
-        sentence_tokens = self._tokenize_for_citation(sentence_clean)
+        sentence_tokens = self._tokenize_for_citation(sentence_clean.lower())
         # 过短片段（如标题、连接词）不参与硬校验
         if len(sentence_tokens) < 3 or len(sentence_clean) < 8:
             return True
@@ -591,7 +998,8 @@ class RAGService:
         if len(overlap) < min_overlap:
             return False
         coverage = len(overlap) / max(1, len(sentence_tokens))
-        min_coverage = 0.08 if summary_mode else 0.18
+        # 放宽覆盖率阈值，允许模型进行自然总结/转述而不被过度误判为“不被支持”
+        min_coverage = 0.03 if summary_mode else 0.06
         return coverage >= min_coverage
 
     @staticmethod
@@ -669,9 +1077,11 @@ class RAGService:
         """
         raw_answer = (answer or "").strip()
         if not raw_answer:
-            return STRICT_RAG_REFUSAL, [], "empty_answer"
+            return self._build_refusal_message(question), [], "empty_answer"
+        raw_answer = self._normalize_inline_citation_markers(raw_answer)
+        raw_answer = self._dedupe_inline_citations(raw_answer)
         if not sources:
-            return STRICT_RAG_REFUSAL, [], "no_sources"
+            return self._build_refusal_message(question), [], "no_sources"
         summary_mode = self._is_summary_intent(question)
         if summary_mode:
             raw_answer = self._attach_evidence_citations_for_summary(raw_answer, sources)
@@ -692,13 +1102,14 @@ class RAGService:
                     }
                 ]
             else:
-                return STRICT_RAG_REFUSAL, [], "no_valid_citations"
+                logger.warning("未能生成有效引用，触发拒答")
+                return self._build_refusal_message(question), [], "unverified_refused"
 
         source_tokens = set()
         for src in sources:
             source_tokens |= self._tokenize_for_citation((src or {}).get("content", "")[:3000])
         if not source_tokens:
-            return STRICT_RAG_REFUSAL, [], "empty_source_tokens"
+            return self._build_refusal_message(question), [], "empty_source_tokens"
 
         unsupported = 0
         checked = 0
@@ -714,19 +1125,28 @@ class RAGService:
             ):
                 unsupported += 1
         if checked == 0:
-            return STRICT_RAG_REFUSAL, [], "no_checkable_sentence"
+            return raw_answer, [], "no_checkable_sentence_but_yielded"
         if not summary_mode and unsupported > 0:
-            return STRICT_RAG_REFUSAL, [], f"unsupported_sentences={unsupported}"
+            logger.warning(f"发现 {unsupported} 句未能严格匹配，依然放行")
+            return cited_answer, citation_map, f"unsupported_{unsupported}_but_yielded"
         if summary_mode:
             # 总结场景更关注“整体可追溯”，放宽到“多数要点有依据”即可通过
             # 1) 短回答（<=2个可检句）允许 1 句不完全匹配；
             # 2) 常规回答要求不支持句占比 <= 60%。
             if checked <= 2:
                 if unsupported > 1:
-                    return STRICT_RAG_REFUSAL, [], f"unsupported_ratio={unsupported}/{checked}"
+                    return (
+                        self._build_refusal_message(question),
+                        [],
+                        f"unsupported_ratio={unsupported}/{checked}",
+                    )
             else:
                 if (unsupported / max(1, checked)) > 0.60:
-                    return STRICT_RAG_REFUSAL, [], f"unsupported_ratio={unsupported}/{checked}"
+                    return (
+                        self._build_refusal_message(question),
+                        [],
+                        f"unsupported_ratio={unsupported}/{checked}",
+                    )
         return cited_answer, citation_map, "ok"
 
     def _rewrite_query_from_history(
@@ -880,7 +1300,12 @@ class RAGService:
                         settings,
                         history=history,
                         draft=summary_answer
-                        + "\n\n请补齐遗漏的关键机制、流程、约束条件与例外情况，避免只有少量要点。",
+                        + (
+                            "\n\n请补齐遗漏的关键机制、流程、约束条件与例外情况，避免只有少量要点。"
+                            if self._contains_cjk(question)
+                            else "\n\nPlease fill in missing mechanisms, process details, constraints, "
+                            "and exceptions. Avoid returning only a few points."
+                        ),
                     )
                     if repaired2:
                         return repaired2
@@ -915,26 +1340,27 @@ class RAGService:
             [
                 (
                     "system",
-                    "你是一个严格基于给定文档作答的总结助手。"
-                    "只能使用提供的文档上下文，不允许外推。"
-                    "输出必须完整、细致，并且每条关键结论都带引用 [^n]。"
-                    "若证据不足，明确说明不足点，不要写半句。",
+                    "You are a grounded summarization assistant. "
+                    "Use only the provided document context and do not extrapolate. "
+                    "Always answer in the same language as the user's question. "
+                    "The output must be complete and detailed, and each key conclusion must include citations [^n]. "
+                    "If evidence is insufficient, explicitly state what is missing.",
                 ),
                 (
                     "human",
-                    "【问题】\n{question}\n\n"
-                    "【已有草稿（可能过短或不完整）】\n{draft}\n\n"
-                    "【文档上下文】\n{context}\n\n"
-                    "请按固定结构输出：\n"
-                    "1) 一句话总览（完整句）\n"
-                    "2) 5-7 条关键要点（每条含引用 [^n]）\n"
-                    "3) 结论与适用边界（含引用 [^n]）",
+                    "Question:\n{question}\n\n"
+                    "Existing draft (may be short or incomplete):\n{draft}\n\n"
+                    "Document context:\n{context}\n\n"
+                    "Output format:\n"
+                    "1) One-sentence overview (complete sentence)\n"
+                    "2) 5-7 key points (each includes citations [^n])\n"
+                    "3) Conclusion and boundaries (with citations [^n])",
                 ),
             ]
         )
         chain = repair_prompt | llm
         out = chain.invoke(
-            {"question": question, "draft": draft or "(无)", "context": merged_context}
+            {"question": question, "draft": draft or "(empty)", "context": merged_context}
         )
         text = (out.content if getattr(out, "content", None) else str(out)).strip()
         if self._looks_truncated_summary(text) or self._looks_too_brief_summary(text):
@@ -946,30 +1372,53 @@ class RAGService:
     ) -> str:
         rag_prompt = self._get_rag_prompt(settings)
         merged_context = self._merge_context_and_history(context, history)
-        try:
+        max_tokens = self._as_int(settings.get("rag_llm_max_tokens", 1024), 1024)
+        temperature = self._as_float(settings.get("rag_llm_temperature", 0.7), 0.7)
+
+        def _invoke_once(use_fallback: bool):
             llm = LLMFactory.create_llm(
                 settings,
                 role="rag",
-                max_tokens=self._as_int(settings.get("rag_llm_max_tokens", 1024), 1024),
-                temperature=self._as_float(settings.get("rag_llm_temperature", 0.7), 0.7),
+                max_tokens=max_tokens,
+                temperature=temperature,
+                use_fallback=use_fallback,
             )
             chain = rag_prompt | llm
-            out = chain.invoke({"context": merged_context, "question": question})
-            return out.content if getattr(out, "content", None) else str(out)
+            return chain.invoke({"context": merged_context, "question": question})
+
+        def _postprocess(text: str, out, use_fallback: bool) -> str:
+            candidate = (text or "").strip()
+            if self._is_likely_cut_by_length_limit(out) or self._looks_truncated_answer(candidate):
+                logger.warning("RAG 输出疑似被截断，尝试自动续写补全")
+                candidate = self._continue_answer_if_truncated(
+                    question=question,
+                    context=context,
+                    history=history,
+                    settings=settings,
+                    draft=candidate,
+                    use_fallback=use_fallback,
+                )
+            candidate = self._repair_answer_language(
+                question=question,
+                context=context,
+                history=history,
+                settings=settings,
+                answer=candidate,
+                use_fallback=use_fallback,
+            )
+            return candidate
+
+        try:
+            out = _invoke_once(use_fallback=False)
+            text = out.content if getattr(out, "content", None) else str(out)
+            return _postprocess(text, out, use_fallback=False)
         except Exception as e:
             if not self._has_role_fallback(settings, "rag"):
                 raise
             logger.warning(f"RAG 主模型调用失败，尝试 fallback: {e}")
-            llm = LLMFactory.create_llm(
-                settings,
-                role="rag",
-                max_tokens=self._as_int(settings.get("rag_llm_max_tokens", 1024), 1024),
-                temperature=self._as_float(settings.get("rag_llm_temperature", 0.7), 0.7),
-                use_fallback=True,
-            )
-            chain = rag_prompt | llm
-            out = chain.invoke({"context": merged_context, "question": question})
-            return out.content if getattr(out, "content", None) else str(out)
+            out = _invoke_once(use_fallback=True)
+            text = out.content if getattr(out, "content", None) else str(out)
+            return _postprocess(text, out, use_fallback=True)
 
     def _run_triple_retrieval_branch(
         self, kb_id: str, question: str, settings: dict, branch: str
@@ -1020,7 +1469,15 @@ class RAGService:
         try:
             # 检索失败时给出可读结果，避免空白分支。
             if retrieval_error:
-                answer = f"（{branch} 分支检索失败，无法基于该路文档生成答案：{retrieval_error}）"
+                if self._contains_cjk(question):
+                    answer = (
+                        f"（{branch} 分支检索失败，无法基于该路文档生成答案：{retrieval_error}）"
+                    )
+                else:
+                    answer = (
+                        f"({branch} branch retrieval failed; unable to answer from this branch: "
+                        f"{retrieval_error})"
+                    )
             else:
                 answer = self._invoke_rag_answer(
                     question, context, settings, history=history
@@ -1035,9 +1492,14 @@ class RAGService:
         except Exception as e:
             logger.exception("triple_parallel 生成分支 %s 失败", branch)
             elapsed_ms = int((perf_counter() - started) * 1000)
+            err_text = (
+                f"（本路生成出错：{e}）"
+                if self._contains_cjk(question)
+                else f"(generation failed for this branch: {e})"
+            )
             return {
                 "branch": branch,
-                "answer": f"（本路生成出错：{e}）",
+                "answer": err_text,
                 "generation_elapsed_ms": elapsed_ms,
                 "error": str(e),
             }
@@ -1099,14 +1561,18 @@ class RAGService:
     ):
         """完整 RAG：先检索再生成（原 ask_stream 行为）。"""
         settings = settings_service.get()
+        pipeline_started = perf_counter()
         yield {"type": "start", "content": ""}
         query_for_retrieval = retrieval_query or question
+        retrieval_started = perf_counter()
         filtered_docs = self._retrieve_documents(
             kb_id, query_for_retrieval, settings, retrieval_mode=retrieval_mode
         )
+        retrieval_elapsed_ms = int((perf_counter() - retrieval_started) * 1000)
         context = self.build_context_from_documents(filtered_docs)
         answer_parts = []
         summary_mode = self._is_summary_intent(question)
+        generation_started = perf_counter()
         try:
             if summary_mode:
                 # 总结问题优先使用 map-reduce，一次性产出更稳定的高层摘要
@@ -1160,6 +1626,8 @@ class RAGService:
         if grounding_reason not in {"ok", "ok_summary_fallback"}:
             logger.warning(f"RAG grounded gate 触发拒答: {grounding_reason}")
         retrieval_debug = self._extract_retrieval_debug(filtered_docs)
+        generation_elapsed_ms = int((perf_counter() - generation_started) * 1000)
+        pipeline_elapsed_ms = int((perf_counter() - pipeline_started) * 1000)
         yield {
             "type": "done",
             "content": "",
@@ -1171,6 +1639,9 @@ class RAGService:
                 "retrieved_chunks": len(filtered_docs),
                 "retrieval_debug": retrieval_debug,
                 "pipeline_mode": PIPELINE_MODE_FULL,
+                "pipeline_elapsed_ms": pipeline_elapsed_ms,
+                "retrieval_elapsed_ms": retrieval_elapsed_ms,
+                "generation_elapsed_ms": generation_elapsed_ms,
                 "answer_with_citations": cited_answer,
                 "citation_map": citation_map,
                 "grounding_reason": grounding_reason,
@@ -1197,87 +1668,89 @@ class RAGService:
         }
 
         retrieval_results: dict[str, dict] = {}
-        with ThreadPoolExecutor(max_workers=3) as pool:
-            retrieval_futures = {
-                pool.submit(
-                    self._run_triple_retrieval_branch,
-                    kb_id,
-                    retrieval_query or question,
-                    settings,
-                    b,
-                ): b
-                for b in _TRIPLE_BRANCH_ORDER
-            }
-            for fut in as_completed(retrieval_futures):
-                result = fut.result()
-                retrieval_results[result["branch"]] = result
+        retrieval_futures = {
+            self.executor.submit(
+                self._run_triple_retrieval_branch,
+                kb_id,
+                retrieval_query or question,
+                settings,
+                b,
+            ): b
+            for b in _TRIPLE_BRANCH_ORDER
+        }
+        for fut in as_completed(retrieval_futures):
+            result = fut.result()
+            retrieval_results[result["branch"]] = result
 
         generation_results: dict[str, dict] = {}
-        with ThreadPoolExecutor(max_workers=3) as pool:
-            generation_futures = {
-                pool.submit(
-                    self._run_triple_generation_branch,
-                    question=question,
-                    settings=settings,
-                    branch=branch,
-                    context=retrieval_results.get(branch, {}).get("context", ""),
-                    retrieval_error=retrieval_results.get(branch, {}).get("error"),
-                    history=history,
-                ): branch
-                for branch in _TRIPLE_BRANCH_ORDER
-            }
-            for fut in as_completed(generation_futures):
-                result = fut.result()
-                branch = result["branch"]
-                generation_results[branch] = result
-                retrieval_result = retrieval_results.get(branch, {})
-                sources = retrieval_result.get("sources", [])
-                cited_answer, citation_map, grounding_reason = self._enforce_answer_grounded(
-                    result.get("answer", ""), sources, question=question
+        generation_futures = {
+            self.executor.submit(
+                self._run_triple_generation_branch,
+                question=question,
+                settings=settings,
+                branch=branch,
+                context=retrieval_results.get(branch, {}).get("context", ""),
+                retrieval_error=retrieval_results.get(branch, {}).get("error"),
+                history=history,
+            ): branch
+            for branch in _TRIPLE_BRANCH_ORDER
+        }
+        for fut in as_completed(generation_futures):
+            result = fut.result()
+            branch = result["branch"]
+            generation_results[branch] = result
+            retrieval_result = retrieval_results.get(branch, {})
+            sources = retrieval_result.get("sources", [])
+            cited_answer, citation_map, grounding_reason = self._enforce_answer_grounded(
+                result.get("answer", ""), sources, question=question
+            )
+            if self._is_summary_intent(question) and grounding_reason.startswith(
+                "unsupported_ratio"
+            ):
+                fallback_answer = self._attach_evidence_citations_for_summary(
+                    result.get("answer", ""), sources
                 )
-                if self._is_summary_intent(question) and grounding_reason.startswith(
-                    "unsupported_ratio"
-                ):
-                    fallback_answer = self._attach_evidence_citations_for_summary(
-                        result.get("answer", ""), sources
+                fallback_answer, fallback_map = self._inject_inline_citations(
+                    fallback_answer, sources
+                )
+                if fallback_map:
+                    cited_answer = fallback_answer
+                    citation_map = fallback_map
+                    grounding_reason = "ok_summary_fallback"
+            if grounding_reason not in {"ok", "ok_summary_fallback"}:
+                logger.warning(
+                    "triple_parallel 分支 %s grounded gate 触发拒答: %s",
+                    branch,
+                    grounding_reason,
+                )
+            result["answer"] = cited_answer
+            result["citation_map"] = citation_map
+            yield {"type": "branch_start", "branch": branch}
+            yield {"type": "content", "branch": branch, "content": result["answer"]}
+            yield {
+                "type": "branch_done",
+                "branch": branch,
+                "sources": sources,
+                "metadata": {
+                    "kb_id": kb_id,
+                    "question": question,
+                    "retrieval_query": retrieval_query or question,
+                    "retrieval_mode": branch,
+                    "answer_with_citations": cited_answer,
+                    "citation_map": citation_map,
+                    "grounding_reason": grounding_reason,
+                    "retrieved_chunks": retrieval_result.get("retrieved_chunks", 0),
+                    "retrieval_debug": retrieval_result.get("retrieval_debug"),
+                    "retrieval_elapsed_ms": retrieval_result.get(
+                        "retrieval_elapsed_ms", 0
+                    ),
+                    "generation_elapsed_ms": result.get("generation_elapsed_ms", 0),
+                    "pipeline_elapsed_ms": retrieval_result.get(
+                        "retrieval_elapsed_ms", 0
                     )
-                    fallback_answer, fallback_map = self._inject_inline_citations(
-                        fallback_answer, sources
-                    )
-                    if fallback_map:
-                        cited_answer = fallback_answer
-                        citation_map = fallback_map
-                        grounding_reason = "ok_summary_fallback"
-                if grounding_reason not in {"ok", "ok_summary_fallback"}:
-                    logger.warning(
-                        "triple_parallel 分支 %s grounded gate 触发拒答: %s",
-                        branch,
-                        grounding_reason,
-                    )
-                result["answer"] = cited_answer
-                result["citation_map"] = citation_map
-                yield {"type": "branch_start", "branch": branch}
-                yield {"type": "content", "branch": branch, "content": result["answer"]}
-                yield {
-                    "type": "branch_done",
-                    "branch": branch,
-                    "sources": sources,
-                    "metadata": {
-                        "kb_id": kb_id,
-                        "question": question,
-                        "retrieval_query": retrieval_query or question,
-                        "retrieval_mode": branch,
-                        "answer_with_citations": cited_answer,
-                        "citation_map": citation_map,
-                        "grounding_reason": grounding_reason,
-                        "retrieved_chunks": retrieval_result.get("retrieved_chunks", 0),
-                        "retrieval_debug": retrieval_result.get("retrieval_debug"),
-                        "retrieval_elapsed_ms": retrieval_result.get(
-                            "retrieval_elapsed_ms", 0
-                        ),
-                        "generation_elapsed_ms": result.get("generation_elapsed_ms", 0),
-                    },
-                }
+                    + result.get("generation_elapsed_ms", 0),
+                },
+            }
 
         triple_payload = {}
         for branch in _TRIPLE_BRANCH_ORDER:
@@ -1290,6 +1763,8 @@ class RAGService:
                 "retrieval_debug": retrieval_result.get("retrieval_debug"),
                 "retrieval_elapsed_ms": retrieval_result.get("retrieval_elapsed_ms", 0),
                 "generation_elapsed_ms": generation_result.get("generation_elapsed_ms", 0),
+                "pipeline_elapsed_ms": retrieval_result.get("retrieval_elapsed_ms", 0)
+                + generation_result.get("generation_elapsed_ms", 0),
                 "error": retrieval_result.get("error") or generation_result.get("error"),
                 "citation_map": generation_result.get("citation_map", []),
             }
@@ -1307,6 +1782,80 @@ class RAGService:
             },
         }
 
+    def single_branch_stream(
+        self,
+        kb_id,
+        question,
+        *,
+        branch: str,
+        history=None,
+        retrieval_query: str | None = None,
+        pipeline_mode: str = PIPELINE_MODE_FULL,
+    ):
+        """
+        单路生成（vector/keyword/hybrid）：
+        与 triple_parallel 的分支处理保持一致（检索、生成、grounded gate、summary fallback）。
+        """
+        settings = settings_service.get()
+        pipeline_started = perf_counter()
+        yield {"type": "start", "content": ""}
+
+        retrieval_result = self._run_triple_retrieval_branch(
+            kb_id, retrieval_query or question, settings, branch
+        )
+        generation_result = self._run_triple_generation_branch(
+            question=question,
+            settings=settings,
+            branch=branch,
+            context=retrieval_result.get("context", ""),
+            retrieval_error=retrieval_result.get("error"),
+            history=history,
+        )
+
+        sources = retrieval_result.get("sources", [])
+        cited_answer, citation_map, grounding_reason = self._enforce_answer_grounded(
+            generation_result.get("answer", ""), sources, question=question
+        )
+        if self._is_summary_intent(question) and grounding_reason.startswith("unsupported_ratio"):
+            fallback_answer = self._attach_evidence_citations_for_summary(
+                generation_result.get("answer", ""), sources
+            )
+            fallback_answer, fallback_map = self._inject_inline_citations(
+                fallback_answer, sources
+            )
+            if fallback_map:
+                cited_answer = fallback_answer
+                citation_map = fallback_map
+                grounding_reason = "ok_summary_fallback"
+        if grounding_reason not in {"ok", "ok_summary_fallback"}:
+            logger.warning("single_branch %s grounded gate 触发拒答: %s", branch, grounding_reason)
+
+        generation_elapsed_ms = generation_result.get("generation_elapsed_ms", 0)
+        retrieval_elapsed_ms = retrieval_result.get("retrieval_elapsed_ms", 0)
+        pipeline_elapsed_ms = int((perf_counter() - pipeline_started) * 1000)
+        yield {"type": "content", "content": cited_answer}
+        yield {
+            "type": "done",
+            "content": "",
+            "sources": sources,
+            "metadata": {
+                "kb_id": kb_id,
+                "question": question,
+                "retrieval_query": retrieval_query or question,
+                "retrieval_mode": branch,
+                "retrieved_chunks": retrieval_result.get("retrieved_chunks", 0),
+                "retrieval_debug": retrieval_result.get("retrieval_debug"),
+                "answer_with_citations": cited_answer,
+                "citation_map": citation_map,
+                "grounding_reason": grounding_reason,
+                "retrieval_elapsed_ms": retrieval_elapsed_ms,
+                "generation_elapsed_ms": generation_elapsed_ms,
+                "pipeline_elapsed_ms": pipeline_elapsed_ms,
+                "pipeline_mode": pipeline_mode,
+                "branch_error": retrieval_result.get("error") or generation_result.get("error"),
+            },
+        }
+
     def ask_stream(
         self,
         kb_id,
@@ -1321,23 +1870,24 @@ class RAGService:
         - retrieve_only: 仅检索
         - generate_only: 仅生成（使用请求体中的 context，不访问该知识库向量检索）
         """
-        retrieval_query = question
-        rewrite_enabled_modes = {
-            PIPELINE_MODE_FULL,
-            PIPELINE_MODE_RETRIEVE_ONLY,
-            PIPELINE_MODE_VECTOR_GENERATE,
-            PIPELINE_MODE_KEYWORD_GENERATE,
-            PIPELINE_MODE_HYBRID_GENERATE,
-            PIPELINE_MODE_TRIPLE_PARALLEL,
-        }
-        if pipeline_mode in rewrite_enabled_modes:
-            settings = settings_service.get()
-            if self._should_rewrite_query(question, history, settings):
-                retrieval_query = self._rewrite_query_from_history(
-                    question, history, settings
-                )
-                if retrieval_query != question:
-                    logger.info(f"查询改写生效: {question} -> {retrieval_query}")
+        settings = settings_service.get()
+        intent = self._classify_intent(question, settings, history)
+        logger.info(f"检测到用户意图: {intent}")
+
+        if intent == "chitchat":
+            yield from self.generate_stream(question, context="", history=history)
+            return
+
+        if intent == "summary":
+            retrieval_query = question
+            yield from self.full_rag_stream(
+                kb_id, question, retrieval_query=retrieval_query, history=history
+            )
+            return
+
+        expanded_queries = self._expand_query_for_retrieval(question, settings)
+        logger.info(f"原问题: {question} -> 扩写查询: {expanded_queries}")
+        retrieval_query = expanded_queries[0] if expanded_queries else question
 
         if pipeline_mode == PIPELINE_MODE_RETRIEVE_ONLY:
             yield from self.retrieve_only_stream(
@@ -1346,28 +1896,31 @@ class RAGService:
         elif pipeline_mode == PIPELINE_MODE_GENERATE_ONLY:
             yield from self.generate_stream(question, context or "", history=history)
         elif pipeline_mode == PIPELINE_MODE_VECTOR_GENERATE:
-            yield from self.full_rag_stream(
+            yield from self.single_branch_stream(
                 kb_id,
                 question,
-                retrieval_mode="vector",
+                branch="vector",
                 retrieval_query=retrieval_query,
                 history=history,
+                pipeline_mode=PIPELINE_MODE_VECTOR_GENERATE,
             )
         elif pipeline_mode == PIPELINE_MODE_KEYWORD_GENERATE:
-            yield from self.full_rag_stream(
+            yield from self.single_branch_stream(
                 kb_id,
                 question,
-                retrieval_mode="keyword",
+                branch="keyword",
                 retrieval_query=retrieval_query,
                 history=history,
+                pipeline_mode=PIPELINE_MODE_KEYWORD_GENERATE,
             )
         elif pipeline_mode == PIPELINE_MODE_HYBRID_GENERATE:
-            yield from self.full_rag_stream(
+            yield from self.single_branch_stream(
                 kb_id,
                 question,
-                retrieval_mode="hybrid",
+                branch="hybrid",
                 retrieval_query=retrieval_query,
                 history=history,
+                pipeline_mode=PIPELINE_MODE_HYBRID_GENERATE,
             )
         elif pipeline_mode == PIPELINE_MODE_TRIPLE_PARALLEL:
             yield from self.triple_parallel_stream(

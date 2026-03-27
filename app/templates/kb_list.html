@@ -1,13 +1,13 @@
 {% extends "base.html" %}
 
-{% block title %}知识库管理 - 智能问答系统{% endblock %}
+{% block title %}Knowledge Base - Smart QA System{% endblock %}
 
-{% block header_title %}知识库管理{% endblock %}
+{% block header_title %}Knowledge Base Management{% endblock %}
 
 {% block header_actions %}
 <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createKbModal">
     <i class="bi bi-plus"></i>
-    <span>创建知识库</span>
+    <span>Create Knowledge Base</span>
 </button>
 {% endblock %}
 
@@ -451,7 +451,7 @@
                         <i class="bi bi-search"></i>
                     </div>
                     <input type="text" class="search-input" id="searchInput" name="search"
-                        placeholder="搜索知识库名称或描述..." value="{{ search }}">
+                        placeholder="Search knowledge base name or description..." value="{{ search }}">
                     {% if search %}
                     <div class="clear-search" onclick="clearSearch()">
                         <i class="bi bi-x"></i>
@@ -460,23 +460,23 @@
                 </div>
                 <div class="sort-group">
                     <div class="form-group">
-                        <label for="sortBySelect" class="form-label">排序字段</label>
+                        <label for="sortBySelect" class="form-label">Sort by</label>
                         <select class="form-select" id="sortBySelect" name="sort_by" onchange="updateSearch()">
-                            <option value="created_at" {% if sort_by=='created_at' %}selected{% endif %}>创建时间</option>
-                            <option value="name" {% if sort_by=='name' %}selected{% endif %}>名称</option>
-                            <option value="updated_at" {% if sort_by=='updated_at' %}selected{% endif %}>更新时间</option>
+                            <option value="created_at" {% if sort_by=='created_at' %}selected{% endif %}>Created Time</option>
+                            <option value="name" {% if sort_by=='name' %}selected{% endif %}>Name</option>
+                            <option value="updated_at" {% if sort_by=='updated_at' %}selected{% endif %}>Updated Time</option>
                         </select>
                     </div>
                     <div class="form-group">
-                        <label for="sortOrderSelect" class="form-label">排序方向</label>
+                        <label for="sortOrderSelect" class="form-label">Sort order</label>
                         <select class="form-select" id="sortOrderSelect" name="sort_order" onchange="updateSearch()">
-                            <option value="desc" {% if sort_order=='desc' %}selected{% endif %}>降序</option>
-                            <option value="asc" {% if sort_order=='asc' %}selected{% endif %}>升序</option>
+                            <option value="desc" {% if sort_order=='desc' %}selected{% endif %}>Descending</option>
+                            <option value="asc" {% if sort_order=='asc' %}selected{% endif %}>Ascending</option>
                         </select>
                     </div>
                     <button type="submit" class="btn btn-primary search-btn">
                         <i class="bi bi-search"></i>
-                        <span>搜索</span>
+                        <span>Search</span>
                     </button>
                 </div>
             </div>
@@ -502,23 +502,23 @@
                     <i class="bi bi-folder"></i>
                     <span>{{ kb.name }}</span>
                 </h5>
-                <p class="kb-card-text">{{ kb.description or '无描述' }}</p>
+                <p class="kb-card-text">{{ kb.description or 'No description' }}</p>
             </div>
             <div class="kb-card-footer">
                 <a href="/kb/{{ kb.id }}" class="btn btn-sm btn-primary">
                     <i class="bi bi-arrow-right"></i>
-                    <span>进入</span>
+                    <span>Open</span>
                 </a>
                 <button class="btn btn-sm btn-warning" data-kb-id="{{ kb.id }}" data-kb-name="{{ kb.name }}"
                     data-kb-description="{{ kb.description or '' }}" data-kb-chunk-size="{{ kb.chunk_size }}"
                     data-kb-chunk-overlap="{{ kb.chunk_overlap }}"
                     data-kb-cover-image="{{ kb.cover_image or '' }}" onclick="editKbFromButton(this)">
                     <i class="bi bi-pencil"></i>
-                    <span>编辑</span>
+                    <span>Edit</span>
                 </button>
                 <button class="btn btn-sm btn-danger" onclick="deleteKb('{{ kb.id }}', '{{ kb.name }}')">
                     <i class="bi bi-trash"></i>
-                    <span>删除</span>
+                    <span>Delete</span>
                 </button>
             </div>
         </div>
@@ -529,11 +529,11 @@
         <div class="empty-state-icon">
             <i class="bi bi-database"></i>
         </div>
-        <div class="empty-state-title">暂无知识库</div>
-        <div class="empty-state-text">点击右上角按钮创建您的第一个知识库</div>
+        <div class="empty-state-title">No knowledge bases yet</div>
+        <div class="empty-state-text">Click the top-right button to create your first knowledge base</div>
         <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createKbModal">
             <i class="bi bi-plus"></i>
-            <span>创建知识库</span>
+            <span>Create Knowledge Base</span>
         </button>
     </div>
     {% endif %}
@@ -541,17 +541,17 @@
     <!-- 分页控件 -->
     {% if pagination and pagination.total > pagination.page_size %}
     <div class="pagination-container">
-        <nav aria-label="知识库列表分页">
+        <nav aria-label="Knowledge base pagination">
             <ul class="pagination">
                 {% set current_page = pagination.page %}
                 {% set total_pages = (pagination.total + pagination.page_size - 1) // pagination.page_size %}
 
-                <!-- 上一页 -->
+                <!-- Previous page -->
                 <li class="page-item {% if current_page <= 1 %}disabled{% endif %}">
                     <a class="page-link"
                         href="?page={{ current_page - 1 }}&page_size={{ pagination.page_size }}{% if search %}&search={{ search|urlencode }}{% endif %}&sort_by={{ sort_by }}&sort_order={{ sort_order }}"
                         {% if current_page <=1 %}tabindex="-1" aria-disabled="true" {% endif %}
-                        aria-label="上一页">
+                        aria-label="Previous page">
                         <i class="bi bi-chevron-left"></i>
                     </a>
                 </li>
@@ -564,7 +564,7 @@
                 <li class="page-item">
                     <a class="page-link"
                         href="?page=1&page_size={{ pagination.page_size }}{% if search %}&search={{ search|urlencode }}{% endif %}&sort_by={{ sort_by }}&sort_order={{ sort_order }}"
-                        aria-label="第1页">1</a>
+                        aria-label="Page 1">1</a>
                 </li>
                 {% if start_page > 2 %}
                 <li class="page-item disabled">
@@ -577,7 +577,7 @@
                 <li class="page-item {% if page_num == current_page %}active{% endif %}">
                     <a class="page-link"
                         href="?page={{ page_num }}&page_size={{ pagination.page_size }}{% if search %}&search={{ search|urlencode }}{% endif %}&sort_by={{ sort_by }}&sort_order={{ sort_order }}"
-                        aria-label="第{{ page_num }}页">
+                        aria-label="Page {{ page_num }}">
                         {{ page_num }}
                     </a>
                 </li>
@@ -592,137 +592,137 @@
                     <li class="page-item">
                         <a class="page-link"
                             href="?page={{ total_pages }}&page_size={{ pagination.page_size }}{% if search %}&search={{ search|urlencode }}{% endif %}&sort_by={{ sort_by }}&sort_order={{ sort_order }}"
-                            aria-label="第{{ total_pages }}页">{{ total_pages }}</a>
+                            aria-label="Page {{ total_pages }}">{{ total_pages }}</a>
                     </li>
                 {% endif %}
 
-                <!-- 下一页 -->
+                <!-- Next page -->
                 <li class="page-item {% if current_page >= total_pages %}disabled{% endif %}">
                     <a class="page-link"
                         href="?page={{ current_page + 1 }}&page_size={{ pagination.page_size }}{% if search %}&search={{ search|urlencode }}{% endif %}&sort_by={{ sort_by }}&sort_order={{ sort_order }}"
                         {% if current_page>= total_pages %}tabindex="-1" aria-disabled="true"{% endif %}
-                        aria-label="下一页">
+                        aria-label="Next page">
                         <i class="bi bi-chevron-right"></i>
                     </a>
                 </li>
             </ul>
         </nav>
         <div class="pagination-info">
-            共 {{ pagination.total }} 个知识库{% if search %}（搜索: "{{ search }}"）{% endif %}，第 {{ current_page }} / {{ total_pages }} 页
+            Total {{ pagination.total }} knowledge bases{% if search %} (search: "{{ search }}"){% endif %}, page {{ current_page }} / {{ total_pages }}
         </div>
     </div>
     {% endif %}
 </div>
-<!-- 创建知识库模态框 -->
+<!-- Create Knowledge Base模态框 -->
 <div class="modal fade" id="createKbModal" tabindex="-1" aria-labelledby="createKbModalLabel" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title" id="createKbModalLabel">创建知识库</h5>
+                <h5 class="modal-title" id="createKbModalLabel">Create Knowledge Base</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <form id="createKbForm" onsubmit="createKb(event)" enctype="multipart/form-data">
                 <div class="modal-body">
                     <div class="mb-4">
-                        <label class="form-label">名称 <span class="text-danger">*</span></label>
+                        <label class="form-label">Name <span class="text-danger">*</span></label>
                         <input type="text" class="form-control" name="name" required>
                     </div>
                     <div class="mb-4">
-                        <label class="form-label">描述</label>
+                        <label class="form-label">Description</label>
                         <textarea class="form-control" name="description" rows="3"></textarea>
                     </div>
                     <div class="mb-4">
-                        <label class="form-label">封面图片（可选）</label>
+                        <label class="form-label">Cover image (optional)</label>
                         <input type="file" class="form-control" name="cover_image"
                             accept="image/jpeg,image/png,image/gif,image/webp" id="coverImageInput">
-                        <div class="form-text">支持 JPG、PNG、GIF、WEBP 格式，最大 5MB</div>
+                        <div class="form-text">Supports JPG, PNG, GIF, WEBP up to 5MB</div>
                         <div id="coverImagePreview" class="mt-2" style="display: none;">
-                            <img id="coverPreviewImg" src="" alt="封面预览" class="img-thumbnail"
+                            <img id="coverPreviewImg" src="" alt="Cover preview" class="img-thumbnail"
                                 style="max-width: 200px; max-height: 200px;">
                         </div>
                     </div>
                     <div class="row">
                         <div class="col-md-6 mb-4">
-                            <label class="form-label">分块大小</label>
+                            <label class="form-label">Chunk Size</label>
                             <input type="number" class="form-control" name="chunk_size" value="512" min="100"
                                 max="2000">
-                            <div class="form-text">每个文本块的最大字符数，建议 512-1024</div>
+                            <div class="form-text">Max characters per chunk. Recommended: 512-1024</div>
                         </div>
                         <div class="col-md-6 mb-4">
-                            <label class="form-label">分块重叠</label>
+                            <label class="form-label">Chunk Overlap</label>
                             <input type="number" class="form-control" name="chunk_overlap" value="50" min="0" max="200">
-                            <div class="form-text">相邻块之间的重叠字符数，建议 50-100</div>
+                            <div class="form-text">Overlapping characters between adjacent chunks. Recommended: 50-100</div>
                         </div>
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
-                    <button type="submit" class="btn btn-primary">创建</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Create</button>
                 </div>
             </form>
         </div>
     </div>
 </div>
 
-<!-- 编辑知识库模态框 -->
+<!-- Edit knowledge base modal -->
 <div class="modal fade" id="editKbModal" tabindex="-1" aria-labelledby="editKbModalLabel" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title" id="editKbModalLabel">编辑知识库</h5>
+                <h5 class="modal-title" id="editKbModalLabel">Edit Knowledge Base</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <form id="editKbForm" onsubmit="updateKb(event)" enctype="multipart/form-data">
                 <input type="hidden" name="kb_id" id="editKbId">
                 <div class="modal-body">
                     <div class="mb-4">
-                        <label class="form-label">名称 <span class="text-danger">*</span></label>
+                        <label class="form-label">Name <span class="text-danger">*</span></label>
                         <input type="text" class="form-control" name="name" id="editKbName" required>
                     </div>
                     <div class="mb-4">
-                        <label class="form-label">描述</label>
+                        <label class="form-label">Description</label>
                         <textarea class="form-control" name="description" id="editKbDescription" rows="3"></textarea>
                     </div>
                     <div class="mb-4">
-                        <label class="form-label">封面图片</label>
+                        <label class="form-label">Cover Image</label>
                         <div id="editCoverPreview" class="mb-2">
-                            <img id="editCoverPreviewImg" src="" alt="当前封面" class="img-thumbnail"
+                            <img id="editCoverPreviewImg" src="" alt="Current cover" class="img-thumbnail"
                                 style="max-width: 200px; max-height: 200px; display: none;">
-                            <div id="editCoverNoImage" class="text-muted small" style="display: none;">暂无封面</div>
+                            <div id="editCoverNoImage" class="text-muted small" style="display: none;">No cover image</div>
                         </div>
                         <input type="file" class="form-control" name="cover_image"
                             accept="image/jpeg,image/png,image/gif,image/webp" id="editCoverImageInput">
-                        <div class="form-text">支持 JPG、PNG、GIF、WEBP 格式，最大 5MB。留空则不修改封面。</div>
+                        <div class="form-text">Supports JPG, PNG, GIF, and WEBP up to 5MB. Leave empty to keep current cover.</div>
                         <div class="form-check mt-2">
                             <input class="form-check-input" type="checkbox" name="delete_cover" id="editDeleteCover"
                                 value="true">
                             <label class="form-check-label" for="editDeleteCover">
-                                删除封面图片
+                                Remove Cover Image
                             </label>
                         </div>
                         <div id="editCoverNewPreview" class="mt-2" style="display: none;">
-                            <img id="editCoverNewPreviewImg" src="" alt="新封面预览" class="img-thumbnail"
+                            <img id="editCoverNewPreviewImg" src="" alt="New cover preview" class="img-thumbnail"
                                 style="max-width: 200px; max-height: 200px;">
                         </div>
                     </div>
                     <div class="row">
                         <div class="col-md-6 mb-4">
-                            <label class="form-label">分块大小</label>
+                            <label class="form-label">Chunk Size</label>
                             <input type="number" class="form-control" name="chunk_size" id="editKbChunkSize" value="512"
                                 min="100" max="2000">
-                            <div class="form-text">每个文本块的最大字符数，建议 512-1024</div>
+                            <div class="form-text">Max characters per chunk. Recommended: 512-1024</div>
                         </div>
                         <div class="col-md-6 mb-4">
-                            <label class="form-label">分块重叠</label>
+                            <label class="form-label">Chunk Overlap</label>
                             <input type="number" class="form-control" name="chunk_overlap" id="editKbChunkOverlap"
                                 value="50" min="0" max="200">
-                            <div class="form-text">相邻块之间的重叠字符数，建议 50-100</div>
+                            <div class="form-text">Overlapping characters between adjacent chunks. Recommended: 50-100</div>
                         </div>
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
-                    <button type="submit" class="btn btn-primary">保存</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save</button>
                 </div>
             </form>
         </div>
@@ -739,20 +739,20 @@
         try {
             const response = await fetch('/api/v1/kb', {
                 method: 'POST',
-                body: formData//使用FormData的时候不需要再手工指定Content-Type，因为浏览器会自动设置内容类型
+                body: formData
             })
             if (response.ok) {
                 location.reload()
             } else {
                 const error = await response.json();
-                alert("创建知识库失败: " + error.message)
+                alert("Create knowledge base failed: " + error.message)
             }
         } catch (error) {
-            alert("创建知识库失败:" + error.message)
+            alert("Create knowledge base failed: " + error.message)
         }
     }
     async function deleteKb(kbId, kbName) {
-        if (!confirm(`确定要删除知识库 "${kbName}" 吗？此操作不可恢复!  `)) {
+        if (!confirm(`Are you sure you want to delete knowledge base "${kbName}"? This action cannot be undone!`)) {
             return
         }
         try {
@@ -763,10 +763,10 @@
                 location.reload()
             } else {
                 const error = await response.json();
-                alert("删除知识库失败: " + error.message)
+                alert("Delete knowledge base failed: " + error.message)
             }
         } catch (error) {
-            alert("删除知识库失败:" + error.message)
+            alert("Delete knowledge base failed:" + error.message)
         }
     }
     function editKbFromButton(button) {
@@ -819,16 +819,16 @@
         try {
             const response = await fetch(`/api/v1/kb/${kbId}`, {
                 method: 'PUT',
-                body: formData//使用FormData的时候不需要再手工指定Content-Type，因为浏览器会自动设置内容类型
+                body: formData
             })
             if (response.ok) {
                 location.reload()
             } else {
                 const error = await response.json();
-                alert("更新知识库失败: " + error.message)
+                alert("Update knowledge base failed: " + error.message)
             }
         } catch (error) {
-            alert("更新知识库失败:" + error.message)
+            alert("Update knowledge base failed:" + error.message)
         }
     }
     document.getElementById("coverImageInput")?.addEventListener('change', function (e) {

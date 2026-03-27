@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, DateTime, Integer, Text, ForeignKey
+from sqlalchemy import Column, String, DateTime, Integer, Text, ForeignKey, UniqueConstraint
 from sqlalchemy.sql import func
 from sqlalchemy.orm import Mapped, mapped_column
 import uuid
@@ -8,6 +8,9 @@ from app.models.base import BaseModel
 class Knowledgebase(BaseModel):
     # 指定数据库表名为knowledgebase
     __tablename__ = "knowledgebase"
+    __table_args__ = (
+        UniqueConstraint("user_id", "name", name="uq_knowledgebase_user_id_name"),
+    )
     # 指定__repr__显示的字段
     __repr_fields__ = ["id", "name"]
     id = Column(String(32), primary_key=True, default=lambda: uuid.uuid4().hex[:32])
@@ -19,7 +22,7 @@ class Knowledgebase(BaseModel):
         index=True,
     )
     # 知识库的名称
-    name = Column(String(128), nullable=False, unique=True, index=True)
+    name = Column(String(128), nullable=False, index=True)
     # 知识库描述
     description = Column(Text, nullable=True)
     # 知识库封面图片路径 可以存储到本地硬盘上，也可以保存到minio等对象存储中去

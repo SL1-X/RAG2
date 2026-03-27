@@ -13,6 +13,12 @@ import json
 import time
 import threading
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+from app.config import Config
+import pickle
+import os
+from app.models.parent_chunk import ParentChunk
+from app.utils.db import db_session
 
 logger = get_logger(__name__)
 
@@ -204,18 +210,47 @@ class RetrievalService:
     def _promote_children_to_parents(self, docs, target_parent_k: int):
         """
         子块命中 -> 父块上下文：
-        按 child 命中顺序聚合 parent_id，父块内容优先取 metadata.parent_content。
+        按 child 命中顺序聚合 parent_id，通过 parent_id 反查父块正文。
         """
         if not docs:
             return []
+        parent_ids = []
+        seen_for_query = set()
+        for doc in docs:
+            parent_id = (doc.metadata or {}).get("parent_id")
+            if not parent_id:
+                continue
+            parent_id = str(parent_id)
+            if parent_id in seen_for_query:
+                continue
+            seen_for_query.add(parent_id)
+            parent_ids.append(parent_id)
+
+        parent_content_map = {}
+        if parent_ids:
+            with db_session() as session:
+                rows = (
+                    session.query(ParentChunk.parent_id, ParentChunk.content)
+                    .filter(ParentChunk.parent_id.in_(parent_ids))
+                    .all()
+                )
+            parent_content_map = {str(pid): content for pid, content in rows}
+
         parent_docs = []
         parent_seen = set()
         for doc in docs:
             metadata = doc.metadata or {}
             parent_id = metadata.get("parent_id")
-            parent_content = metadata.get("parent_content")
-            if not parent_id or not parent_content:
+            if not parent_id:
                 # 兼容老索引（无父子结构）：直接按当前块返回
+                parent_docs.append(doc)
+                if len(parent_docs) >= target_parent_k:
+                    break
+                continue
+            parent_id = str(parent_id)
+            parent_content = parent_content_map.get(parent_id)
+            if not parent_content:
+                # 若父块映射缺失，回退到当前子块，避免召回为空
                 parent_docs.append(doc)
                 if len(parent_docs) >= target_parent_k:
                     break
@@ -278,14 +313,67 @@ class RetrievalService:
             "built_at": time.monotonic(),
         }
 
-    def _get_keyword_index(self, collection_name: str, vector_store, settings: dict):
+    @staticmethod
+    def _keyword_index_file_path(collection_name: str) -> Path:
+        safe_name = re.sub(r"[^A-Za-z0-9_.-]", "_", str(collection_name or "default"))
+        return Path(Config.BASE_DIR) / "storages" / "keyword_index" / f"{safe_name}.pkl"
+
+    def _load_keyword_index_from_disk(self, collection_name: str):
+        index_path = self._keyword_index_file_path(collection_name)
+        if not index_path.exists():
+            return {
+                "bm25": None,
+                "docs": [],
+                "doc_count": 0,
+                "total_count": 0,
+                "built_at": time.monotonic(),
+                "source_mtime": None,
+            }
+        with open(index_path, "rb") as f:
+            payload = pickle.load(f) or {}
+        docs_payload = payload.get("docs") or []
+        tokenized_docs = payload.get("tokenized_docs") or []
+        langchain_docs = []
+        for item in docs_payload:
+            if not isinstance(item, dict):
+                continue
+            langchain_docs.append(
+                Document(
+                    page_content=item.get("page_content") or "",
+                    metadata=item.get("metadata") or {},
+                )
+            )
+        # 为保证分词规则升级后立即生效，加载时统一按当前 tokenizer 重算
+        tokenized_docs = [self._tokenize_for_keyword(doc.page_content) for doc in langchain_docs]
+        bm25 = BM25Okapi(tokenized_docs) if tokenized_docs else None
+        return {
+            "bm25": bm25,
+            "docs": langchain_docs,
+            "doc_count": len(langchain_docs),
+            "total_count": int(payload.get("total_count", len(langchain_docs))),
+            "built_at": time.monotonic(),
+            "source_mtime": os.path.getmtime(index_path),
+        }
+
+    def _get_keyword_index(self, collection_name: str, settings: dict):
         ttl_sec = max(0, min(self._to_int(settings.get("keyword_index_ttl_sec", 300), 300), 3600))
         now = time.monotonic()
+        source_mtime = None
+        index_path = self._keyword_index_file_path(collection_name)
+        if index_path.exists():
+            try:
+                source_mtime = os.path.getmtime(index_path)
+            except OSError:
+                source_mtime = None
         with self._keyword_cache_lock:
             cached = self._keyword_index_cache.get(collection_name)
-            if cached and (now - cached.get("built_at", 0.0)) <= ttl_sec:
+            if (
+                cached
+                and cached.get("source_mtime") == source_mtime
+                and (now - cached.get("built_at", 0.0)) <= ttl_sec
+            ):
                 return cached
-        built = self._build_keyword_index(vector_store)
+        built = self._load_keyword_index_from_disk(collection_name)
         with self._keyword_cache_lock:
             self._keyword_index_cache[collection_name] = built
         return built
@@ -373,10 +461,16 @@ class RetrievalService:
     def _tokenize_for_keyword(self, text: str):
         """
         关键词检索分词：
-        - 英文：正则分词 + 英文停用词
-        - CJK：兼容使用 jieba（仅兜底）
+        - 英文：统一小写 + 正则抽取单词
+        - CJK：兼容使用 jieba（兜底）
         """
         text = (text or "").strip()
+        if not text:
+            return []
+        return self._bm25_tokenize(text)
+
+    def _bm25_tokenize(self, text: str) -> list[str]:
+        text = (text or "").lower()
         if not text:
             return []
         if self._contains_cjk(text):
@@ -408,52 +502,17 @@ class RetrievalService:
                 for w in words
                 if len(w.strip()) > 1 and w.strip() not in cjk_stopwords
             ]
-        en_stopwords = {
-            "the",
-            "a",
-            "an",
-            "and",
-            "or",
-            "to",
-            "of",
-            "in",
-            "on",
-            "for",
-            "by",
-            "with",
-            "is",
-            "are",
-            "was",
-            "were",
-            "be",
-            "as",
-            "at",
-            "that",
-            "this",
-            "it",
-            "from",
-            "into",
-            "about",
-            "what",
-            "which",
-            "who",
-            "when",
-            "where",
-            "how",
-        }
-        words = re.findall(r"[A-Za-z][A-Za-z0-9_'-]*", text.lower())
-        return [w for w in words if len(w) > 1 and w not in en_stopwords]
+        return re.findall(r"\b\w+\b", text)
 
     def keyword_search(self, collection_name, query, rerank=True, settings: dict | None = None):
         settings = settings or self._get_settings()
         self._ensure_reranker(settings)
-        vector_store = vector_service.get_or_create_collection(collection_name)
         top_k = self._to_int(settings.get("top_k", "5"), 5)
         keyword_threshold = float(settings.get("keyword_threshold", "0.1"))
         rerank_candidate_k = self._get_rerank_candidate_k(settings, top_k)
         # 把关键字相似度的阈值限定在0到1之间
         keyword_threshold = max(0.0, min(keyword_threshold, 1.0))
-        keyword_index = self._get_keyword_index(collection_name, vector_store, settings)
+        keyword_index = self._get_keyword_index(collection_name, settings)
         langchain_docs = keyword_index.get("docs") or []
         if not langchain_docs:
             self._emit_retrieval_trace(
