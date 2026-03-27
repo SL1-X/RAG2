@@ -1,0 +1,314 @@
+{% extends "base.html" %}
+
+{% block title %}{{ document.name }} - 分块列表 - 智能问答系统{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* 文档分块页面样式 */
+    .chunk-card {
+        border-radius: 12px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        transition: all 0.3s ease;
+        border: 1px solid var(--bs-border-color-translucent);
+    }
+    
+    .chunk-table {
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    }
+    
+    .chunk-table thead {
+        background-color: var(--bs-primary-bg-subtle);
+        border-bottom: 2px solid var(--bs-primary-border-subtle);
+    }
+    
+    .chunk-table th {
+        font-weight: 600;
+        color: var(--bs-primary);
+        text-transform: uppercase;
+        font-size: 0.875rem;
+        letter-spacing: 0.05em;
+    }
+    
+    .chunk-table tbody tr {
+        transition: all 0.2s ease;
+        border-bottom: 1px solid var(--bs-border-color);
+    }
+    
+    .chunk-table tbody tr:hover {
+        background-color: var(--bs-secondary-bg);
+        transform: translateX(4px);
+    }
+    
+    .chunk-table tbody tr:last-child {
+        border-bottom: none;
+    }
+    
+    .chunk-content {
+        max-height: 150px;
+        overflow-y: auto;
+        padding: 0.75rem;
+        background-color: var(--bs-secondary-bg);
+        border-radius: 8px;
+        border: 1px solid var(--bs-border-color);
+        font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+        font-size: 0.875rem;
+        line-height: 1.5;
+        transition: all 0.2s ease;
+    }
+    
+    .chunk-content:hover {
+        border-color: var(--bs-primary);
+        box-shadow: 0 0 0 0.125rem rgba(var(--bs-primary-rgb), 0.1);
+    }
+    
+    .copy-btn {
+        transition: all 0.2s ease;
+        border-radius: 6px;
+        font-size: 0.875rem;
+        padding: 0.25rem 0.75rem;
+    }
+    
+    .copy-btn:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    }
+    
+    .doc-info {
+        background-color: var(--bs-secondary-bg);
+        border-radius: 8px;
+        padding: 1.25rem;
+        margin-bottom: 1.5rem;
+        border: 1px solid var(--bs-border-color);
+    }
+    
+    .doc-info-item {
+        margin-bottom: 0.75rem;
+    }
+    
+    .doc-info-label {
+        font-weight: 600;
+        color: var(--bs-secondary-color);
+        margin-right: 0.5rem;
+    }
+    
+    .badge-status {
+        padding: 0.5em 1em;
+        border-radius: 20px;
+        font-weight: 500;
+        font-size: 0.875rem;
+        transition: all 0.2s ease;
+    }
+    
+    /* 空状态样式 */
+    .empty-state {
+        text-align: center;
+        padding: 4rem 2rem;
+        background-color: var(--bs-secondary-bg);
+        border-radius: 12px;
+        margin: 2rem 0;
+    }
+    
+    .empty-state-icon {
+        font-size: 4rem;
+        color: var(--bs-secondary-color);
+        margin-bottom: 1rem;
+        opacity: 0.5;
+    }
+    
+    .empty-state-text {
+        color: var(--bs-secondary-color);
+        font-size: 1.125rem;
+        margin-bottom: 0.5rem;
+    }
+    
+    .empty-state-subtext {
+        color: var(--bs-tertiary-color);
+        font-size: 0.875rem;
+    }
+    
+    /* 面包屑导航样式 */
+    .breadcrumb {
+        background-color: transparent;
+        padding: 0;
+        margin-bottom: 1.5rem;
+    }
+    
+    .breadcrumb-item a {
+        color: var(--bs-secondary-color);
+        text-decoration: none;
+        transition: color 0.2s ease;
+    }
+    
+    .breadcrumb-item a:hover {
+        color: var(--bs-primary);
+    }
+    
+    .breadcrumb-item.active {
+        color: var(--bs-primary);
+        font-weight: 500;
+    }
+    
+    /* 响应式调整 */
+    @media (max-width: 768px) {
+        .chunk-table {
+            font-size: 0.875rem;
+        }
+        
+        .chunk-content {
+            font-size: 0.8125rem;
+            max-height: 120px;
+        }
+        
+        .copy-btn {
+            font-size: 0.75rem;
+            padding: 0.25rem 0.5rem;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- 面包屑导航 -->
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="/">首页</a></li>
+            <li class="breadcrumb-item"><a href="/kb">知识库</a></li>
+            <li class="breadcrumb-item"><a href="/kb/{{ kb.id }}">{{ kb.name }}</a></li>
+            <li class="breadcrumb-item active">{{ document.name }} - 分块列表</li>
+        </ol>
+    </nav>
+
+    <!-- 分块列表卡片 -->
+    <div class="chunk-card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">
+                <i class="bi bi-file-earmark-text me-2"></i>
+                {{ document.name }} - 分块列表
+            </h5>
+            <a href="/kb/{{ kb.id }}" class="btn btn-secondary btn-sm d-flex align-items-center gap-1">
+                <i class="bi bi-arrow-left"></i>
+                <span>返回文档列表</span>
+            </a>
+        </div>
+        <div class="card-body">
+            <!-- 文档信息 -->
+            <div class="doc-info">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="doc-info-item">
+                            <span class="doc-info-label">文档名称：</span>
+                            <span class="font-medium">{{ document.name }}</span>
+                        </div>
+                        <div class="doc-info-item">
+                            <span class="doc-info-label">文档状态：</span>
+                            {% set status_map = {
+                                'completed': '已完成',
+                                'processing': '处理中',
+                                'failed': '失败',
+                                'pending': '待处理'
+                            } %}
+                            <span class="badge badge-status bg-{{ 'success' if document.status == 'completed' else 'warning' if document.status == 'processing' else 'danger' if document.status == 'failed' else 'secondary' }}">
+                                {{ status_map.get(document.status, document.status) }}
+                            </span>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="doc-info-item">
+                            <span class="doc-info-label">分块数量：</span>
+                            <span class="font-medium">{{ chunks|length }}</span>
+                        </div>
+                        <div class="doc-info-item">
+                            <span class="doc-info-label">文件大小：</span>
+                            <span class="font-medium">{{ "%.2f"|format(document.file_size / 1024) }} KB</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 分块列表 -->
+            {% if chunks %}
+            <div class="table-responsive">
+                <table class="table table-hover chunk-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 80px;">序号</th>
+                            <th style="width: 200px;">分块ID</th>
+                            <th>内容</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for chunk in chunks %}
+                        <tr>
+                            <td>
+                                <span class="font-medium">{{ chunk.chunk_index + 1 }}</span>
+                            </td>
+                            <td>
+                                <code class="text-muted" style="font-size: 0.85em;">{{ chunk.id }}</code>
+                            </td>
+                            <td>
+                                <div class="chunk-content">
+                                    {{ chunk.content }}
+                                </div>
+                                <button class="btn copy-btn btn-link p-0 mt-2" data-chunk-id="{{ chunk.id }}" data-chunk-content="{{ chunk.content|replace('"', '&quot;')|replace("'", "&#39;")|replace('\n', '&#10;') }}" onclick="copyChunkContent(event)" aria-label="复制分块内容">
+                                    <i class="bi bi-clipboard me-1"></i>
+                                    <span>复制</span>
+                                </button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="empty-state">
+                <div class="empty-state-icon">
+                    <i class="bi bi-inbox"></i>
+                </div>
+                <p class="empty-state-text">该文档还没有分块数据</p>
+                <p class="empty-state-subtext">请确保文档已处理完成（状态为 completed）</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// 定义一个函数用于复制分块内容
+function copyChunkContent(event) {
+    // 获取被点击的按钮元素
+    const btn = event.target.closest('button');
+    // 获取分块ID（可用于后续拓展）
+    const chunkId = btn.getAttribute('data-chunk-id');
+    // 获取分块内容（含HTML实体编码）
+    let content = btn.getAttribute('data-chunk-content');
+
+    // 将HTML实体还原为原始字符（换行、单引号、双引号）
+    content = content.replace(/&#10;/g, '\n').replace(/&#39;/g, "'").replace(/&quot;/g, '"');
+
+    // 使用浏览器Clipboard API将内容写入剪贴板
+    navigator.clipboard.writeText(content).then(function() {
+        // 成功复制后：先保存按钮原始显示内容
+        const originalHTML = btn.innerHTML;
+        // 修改按钮显示为已复制样式
+        btn.innerHTML = '<i class="bi bi-check"></i> 已复制';
+        btn.classList.add('text-success');
+
+        // 2秒后恢复按钮为原始内容和样式
+        setTimeout(function() {
+            btn.innerHTML = originalHTML;
+            btn.classList.remove('text-success');
+        }, 2000);
+    }).catch(function(err) {
+        // 如果写入剪贴板失败，打印错误并弹窗提示
+        console.error('复制失败:', err);
+        alert('复制失败，请手动复制');
+    });
+}
+</script>
+{% endblock %}
+

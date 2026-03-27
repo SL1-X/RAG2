@@ -1,0 +1,23 @@
+volumes/
+__pycache__/
+.DS_Store
+.env
+*.wal
+*.tmp
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+uploads
+logs
+chroma_db
+storages
+
+.env

@@ -1,0 +1,896 @@
+{% extends "base.html" %}
+
+{% block title %}知识库管理 - 智能问答系统{% endblock %}
+
+{% block header_title %}知识库管理{% endblock %}
+
+{% block header_actions %}
+<button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createKbModal">
+    <i class="bi bi-plus"></i>
+    <span>创建知识库</span>
+</button>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* 响应式卡片布局 */
+    .kb-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+        gap: 1.5rem;
+        margin-top: 1.5rem;
+    }
+
+    /* 知识库卡片样式 */
+    .kb-card {
+        border: 1px solid var(--border-color);
+        border-radius: 1rem;
+        overflow: hidden;
+        transition: all 0.3s ease;
+        background-color: var(--card-bg);
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .kb-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+        border-color: rgba(59, 130, 246, 0.2);
+    }
+
+    .kb-card-img-container {
+        height: 160px;
+        background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(139, 92, 246, 0.1));
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-bottom: 1px solid var(--border-color);
+        overflow: hidden;
+    }
+
+    .kb-card-img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        transition: transform 0.3s ease;
+    }
+
+    .kb-card:hover .kb-card-img {
+        transform: scale(1.05);
+    }
+
+    .kb-card-icon {
+        font-size: 3.5rem;
+        color: var(--primary-color);
+        transition: all 0.3s ease;
+    }
+
+    .kb-card:hover .kb-card-icon {
+        transform: scale(1.1);
+    }
+
+    .kb-card-body {
+        padding: 1.5rem;
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .kb-card-title {
+        font-size: 1.125rem;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: 0.75rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .kb-card-text {
+        font-size: 0.875rem;
+        color: var(--text-secondary);
+        margin-bottom: 1rem;
+        flex: 1;
+        line-height: 1.5;
+        display: -webkit-box;
+        -webkit-line-clamp: 3;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+
+    .kb-card-footer {
+        padding: 1rem 1.5rem;
+        border-top: 1px solid var(--border-color);
+        background-color: rgba(249, 250, 251, 0.5);
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+    }
+
+    /* 工具栏样式 */
+    .toolbar {
+        background-color: var(--card-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 1rem;
+        padding: 1.5rem;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+        margin-bottom: 1.5rem;
+    }
+
+    .toolbar-form {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+    }
+
+    .form-row {
+        display: flex;
+        gap: 1rem;
+        align-items: center;
+        flex-wrap: wrap;
+    }
+
+    .search-group {
+        flex: 1;
+        min-width: 300px;
+        position: relative;
+    }
+
+    .search-input {
+        width: 100%;
+        padding: 0.75rem 1rem 0.75rem 2.5rem;
+        border: 1px solid var(--border-color);
+        border-radius: 0.75rem;
+        font-size: 0.875rem;
+        transition: all 0.3s ease;
+        background-color: var(--input-bg);
+    }
+
+    .search-input:focus {
+        outline: none;
+        border-color: var(--primary-color);
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    }
+
+    .search-icon {
+        position: absolute;
+        left: 0.75rem;
+        top: 50%;
+        transform: translateY(-50%);
+        color: var(--text-secondary);
+    }
+
+    .clear-search {
+        position: absolute;
+        right: 0.75rem;
+        top: 50%;
+        transform: translateY(-50%);
+        color: var(--text-secondary);
+        cursor: pointer;
+        transition: color 0.3s ease;
+    }
+
+    .clear-search:hover {
+        color: var(--error-color);
+    }
+
+    .sort-group {
+        display: flex;
+        gap: 0.75rem;
+        align-items: center;
+        flex-wrap: wrap;
+    }
+
+    .form-group {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+    }
+
+    .form-label {
+        font-size: 0.75rem;
+        font-weight: 500;
+        color: var(--text-secondary);
+    }
+
+    .form-select {
+        padding: 0.5rem 0.75rem;
+        border: 1px solid var(--border-color);
+        border-radius: 0.75rem;
+        font-size: 0.875rem;
+        transition: all 0.3s ease;
+        background-color: var(--input-bg);
+    }
+
+    .form-select:focus {
+        outline: none;
+        border-color: var(--primary-color);
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    }
+
+    .search-btn {
+        padding: 0.75rem 1.5rem;
+        border-radius: 0.75rem;
+        font-size: 0.875rem;
+        font-weight: 500;
+        transition: all 0.3s ease;
+    }
+
+    /* 分页样式 */
+    .pagination-container {
+        margin-top: 2.5rem;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 1rem;
+    }
+
+    .pagination {
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+        background-color: var(--card-bg);
+        padding: 0.5rem;
+        border-radius: 1rem;
+        border: 1px solid var(--border-color);
+    }
+
+    .page-item {
+        margin: 0;
+    }
+
+    .page-link {
+        padding: 0.5rem 0.875rem;
+        border: none;
+        border-radius: 0.75rem;
+        font-size: 0.875rem;
+        transition: all 0.3s ease;
+        background-color: transparent;
+        color: var(--text-secondary);
+    }
+
+    .page-link:hover {
+        background-color: rgba(59, 130, 246, 0.1);
+        color: var(--primary-color);
+    }
+
+    .page-item.active .page-link {
+        background-color: var(--primary-color);
+        color: white;
+        font-weight: 500;
+    }
+
+    .page-item.disabled .page-link {
+        color: var(--text-tertiary);
+        cursor: not-allowed;
+    }
+
+    .pagination-info {
+        font-size: 0.75rem;
+        color: var(--text-secondary);
+    }
+
+    /* 空状态样式 */
+    .empty-state {
+        text-align: center;
+        padding: 4rem 2rem;
+        background-color: rgba(249, 250, 251, 0.8);
+        border: 2px dashed var(--border-color);
+        border-radius: 1rem;
+        margin-top: 2rem;
+    }
+
+    .empty-state-icon {
+        font-size: 4rem;
+        color: rgba(59, 130, 246, 0.2);
+        margin-bottom: 1rem;
+    }
+
+    .empty-state-title {
+        font-size: 1.125rem;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: 0.5rem;
+    }
+
+    .empty-state-text {
+        font-size: 0.875rem;
+        color: var(--text-secondary);
+        margin-bottom: 2rem;
+    }
+
+    /* 模态框样式 */
+    .modal-content {
+        border-radius: 1rem;
+        border: 1px solid var(--border-color);
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+    }
+
+    .modal-header {
+        border-bottom: 1px solid var(--border-color);
+        padding: 1.5rem;
+    }
+
+    .modal-title {
+        font-size: 1.125rem;
+        font-weight: 600;
+        color: var(--text-primary);
+    }
+
+    .modal-body {
+        padding: 1.5rem;
+    }
+
+    .modal-footer {
+        border-top: 1px solid var(--border-color);
+        padding: 1.5rem;
+    }
+
+    /* 按钮样式 */
+    .btn-sm {
+        padding: 0.5rem 1rem;
+        border-radius: 0.75rem;
+        font-size: 0.75rem;
+        font-weight: 500;
+        transition: all 0.3s ease;
+        flex: 1;
+        min-width: 80px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.25rem;
+    }
+
+    .btn-primary:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+    }
+
+    .btn-warning:hover {
+        background-color: #f59e0b;
+        border-color: #f59e0b;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
+    }
+
+    .btn-danger:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+    }
+
+    /* 表单样式 */
+    .form-control {
+        padding: 0.75rem 1rem;
+        border: 1px solid var(--border-color);
+        border-radius: 0.75rem;
+        font-size: 0.875rem;
+        transition: all 0.3s ease;
+        background-color: var(--input-bg);
+    }
+
+    .form-control:focus {
+        outline: none;
+        border-color: var(--primary-color);
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    }
+
+    .form-text {
+        font-size: 0.75rem;
+        color: var(--text-tertiary);
+        margin-top: 0.25rem;
+    }
+
+    .form-check {
+        margin-top: 0.5rem;
+    }
+
+    .form-check-input {
+        margin-top: 0.25rem;
+    }
+
+    .form-check-label {
+        font-size: 0.875rem;
+        color: var(--text-secondary);
+    }
+
+    /* 预览图片样式 */
+    .img-thumbnail {
+        border-radius: 0.75rem;
+        border: 1px solid var(--border-color);
+    }
+
+    /* 响应式设计 */
+    @media (max-width: 768px) {
+        .form-row {
+            flex-direction: column;
+            align-items: stretch;
+        }
+
+        .search-group {
+            min-width: 100%;
+        }
+
+        .sort-group {
+            flex-direction: column;
+            align-items: stretch;
+        }
+
+        .kb-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .kb-card-footer {
+            flex-direction: column;
+        }
+
+        .btn-sm {
+            width: 100%;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<style>
+    @media (min-width: 992px) {
+        #kbList>div {
+            flex: 0 0 20%;
+            /* max-width: 20%; */
+        }
+    }
+</style>
+<div class="container mt-5">
+    <!-- 搜索和排序工具栏 -->
+    <div class="toolbar">
+        <form method="GET" action="/kb" id="searchForm" class="toolbar-form">
+            <div class="form-row">
+                <div class="search-group">
+                    <div class="search-icon">
+                        <i class="bi bi-search"></i>
+                    </div>
+                    <input type="text" class="search-input" id="searchInput" name="search"
+                        placeholder="搜索知识库名称或描述..." value="{{ search }}">
+                    {% if search %}
+                    <div class="clear-search" onclick="clearSearch()">
+                        <i class="bi bi-x"></i>
+                    </div>
+                    {% endif %}
+                </div>
+                <div class="sort-group">
+                    <div class="form-group">
+                        <label for="sortBySelect" class="form-label">排序字段</label>
+                        <select class="form-select" id="sortBySelect" name="sort_by" onchange="updateSearch()">
+                            <option value="created_at" {% if sort_by=='created_at' %}selected{% endif %}>创建时间</option>
+                            <option value="name" {% if sort_by=='name' %}selected{% endif %}>名称</option>
+                            <option value="updated_at" {% if sort_by=='updated_at' %}selected{% endif %}>更新时间</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="sortOrderSelect" class="form-label">排序方向</label>
+                        <select class="form-select" id="sortOrderSelect" name="sort_order" onchange="updateSearch()">
+                            <option value="desc" {% if sort_order=='desc' %}selected{% endif %}>降序</option>
+                            <option value="asc" {% if sort_order=='asc' %}selected{% endif %}>升序</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-primary search-btn">
+                        <i class="bi bi-search"></i>
+                        <span>搜索</span>
+                    </button>
+                </div>
+            </div>
+            <input type="hidden" name="page" value="1">
+            <input type="hidden" name="page_size" value="{{ pagination.page_size if pagination else 10 }}">
+        </form>
+    </div>
+
+    <!-- 知识库列表 -->
+    {% if kbs %}
+    <div class="kb-grid" id="kbList">
+        {% for kb in kbs %}
+        <div class="kb-card">
+            <div class="kb-card-img-container">
+                {% if kb.cover_image %}
+                <img src="/kb/{{ kb.id }}/cover" class="kb-card-img" alt="{{ kb.name|e }}">
+                {% else %}
+                <i class="bi bi-database kb-card-icon"></i>
+                {% endif %}
+            </div>
+            <div class="kb-card-body">
+                <h5 class="kb-card-title">
+                    <i class="bi bi-folder"></i>
+                    <span>{{ kb.name }}</span>
+                </h5>
+                <p class="kb-card-text">{{ kb.description or '无描述' }}</p>
+            </div>
+            <div class="kb-card-footer">
+                <a href="/kb/{{ kb.id }}" class="btn btn-sm btn-primary">
+                    <i class="bi bi-arrow-right"></i>
+                    <span>进入</span>
+                </a>
+                <button class="btn btn-sm btn-warning" data-kb-id="{{ kb.id }}" data-kb-name="{{ kb.name }}"
+                    data-kb-description="{{ kb.description or '' }}" data-kb-chunk-size="{{ kb.chunk_size }}"
+                    data-kb-chunk-overlap="{{ kb.chunk_overlap }}"
+                    data-kb-cover-image="{{ kb.cover_image or '' }}" onclick="editKbFromButton(this)">
+                    <i class="bi bi-pencil"></i>
+                    <span>编辑</span>
+                </button>
+                <button class="btn btn-sm btn-danger" onclick="deleteKb('{{ kb.id }}', '{{ kb.name }}')">
+                    <i class="bi bi-trash"></i>
+                    <span>删除</span>
+                </button>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <div class="empty-state-icon">
+            <i class="bi bi-database"></i>
+        </div>
+        <div class="empty-state-title">暂无知识库</div>
+        <div class="empty-state-text">点击右上角按钮创建您的第一个知识库</div>
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createKbModal">
+            <i class="bi bi-plus"></i>
+            <span>创建知识库</span>
+        </button>
+    </div>
+    {% endif %}
+
+    <!-- 分页控件 -->
+    {% if pagination and pagination.total > pagination.page_size %}
+    <div class="pagination-container">
+        <nav aria-label="知识库列表分页">
+            <ul class="pagination">
+                {% set current_page = pagination.page %}
+                {% set total_pages = (pagination.total + pagination.page_size - 1) // pagination.page_size %}
+
+                <!-- 上一页 -->
+                <li class="page-item {% if current_page <= 1 %}disabled{% endif %}">
+                    <a class="page-link"
+                        href="?page={{ current_page - 1 }}&page_size={{ pagination.page_size }}{% if search %}&search={{ search|urlencode }}{% endif %}&sort_by={{ sort_by }}&sort_order={{ sort_order }}"
+                        {% if current_page <=1 %}tabindex="-1" aria-disabled="true" {% endif %}
+                        aria-label="上一页">
+                        <i class="bi bi-chevron-left"></i>
+                    </a>
+                </li>
+
+                <!-- 页码 -->
+                {% set start_page = [1, current_page - 2] | max %}
+                {% set end_page = [total_pages, current_page + 2] | min %}
+
+                {% if start_page > 1 %}
+                <li class="page-item">
+                    <a class="page-link"
+                        href="?page=1&page_size={{ pagination.page_size }}{% if search %}&search={{ search|urlencode }}{% endif %}&sort_by={{ sort_by }}&sort_order={{ sort_order }}"
+                        aria-label="第1页">1</a>
+                </li>
+                {% if start_page > 2 %}
+                <li class="page-item disabled">
+                    <span class="page-link">...</span>
+                </li>
+                {% endif %}
+                {% endif %}
+
+                {% for page_num in range(start_page, end_page + 1) %}
+                <li class="page-item {% if page_num == current_page %}active{% endif %}">
+                    <a class="page-link"
+                        href="?page={{ page_num }}&page_size={{ pagination.page_size }}{% if search %}&search={{ search|urlencode }}{% endif %}&sort_by={{ sort_by }}&sort_order={{ sort_order }}"
+                        aria-label="第{{ page_num }}页">
+                        {{ page_num }}
+                    </a>
+                </li>
+                {% endfor %}
+
+                {% if end_page < total_pages %}
+                    {% if end_page < total_pages - 1 %}
+                    <li class="page-item disabled">
+                        <span class="page-link">...</span>
+                    </li>
+                    {% endif %}
+                    <li class="page-item">
+                        <a class="page-link"
+                            href="?page={{ total_pages }}&page_size={{ pagination.page_size }}{% if search %}&search={{ search|urlencode }}{% endif %}&sort_by={{ sort_by }}&sort_order={{ sort_order }}"
+                            aria-label="第{{ total_pages }}页">{{ total_pages }}</a>
+                    </li>
+                {% endif %}
+
+                <!-- 下一页 -->
+                <li class="page-item {% if current_page >= total_pages %}disabled{% endif %}">
+                    <a class="page-link"
+                        href="?page={{ current_page + 1 }}&page_size={{ pagination.page_size }}{% if search %}&search={{ search|urlencode }}{% endif %}&sort_by={{ sort_by }}&sort_order={{ sort_order }}"
+                        {% if current_page>= total_pages %}tabindex="-1" aria-disabled="true"{% endif %}
+                        aria-label="下一页">
+                        <i class="bi bi-chevron-right"></i>
+                    </a>
+                </li>
+            </ul>
+        </nav>
+        <div class="pagination-info">
+            共 {{ pagination.total }} 个知识库{% if search %}（搜索: "{{ search }}"）{% endif %}，第 {{ current_page }} / {{ total_pages }} 页
+        </div>
+    </div>
+    {% endif %}
+</div>
+<!-- 创建知识库模态框 -->
+<div class="modal fade" id="createKbModal" tabindex="-1" aria-labelledby="createKbModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="createKbModalLabel">创建知识库</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="createKbForm" onsubmit="createKb(event)" enctype="multipart/form-data">
+                <div class="modal-body">
+                    <div class="mb-4">
+                        <label class="form-label">名称 <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" name="name" required>
+                    </div>
+                    <div class="mb-4">
+                        <label class="form-label">描述</label>
+                        <textarea class="form-control" name="description" rows="3"></textarea>
+                    </div>
+                    <div class="mb-4">
+                        <label class="form-label">封面图片（可选）</label>
+                        <input type="file" class="form-control" name="cover_image"
+                            accept="image/jpeg,image/png,image/gif,image/webp" id="coverImageInput">
+                        <div class="form-text">支持 JPG、PNG、GIF、WEBP 格式，最大 5MB</div>
+                        <div id="coverImagePreview" class="mt-2" style="display: none;">
+                            <img id="coverPreviewImg" src="" alt="封面预览" class="img-thumbnail"
+                                style="max-width: 200px; max-height: 200px;">
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-4">
+                            <label class="form-label">分块大小</label>
+                            <input type="number" class="form-control" name="chunk_size" value="512" min="100"
+                                max="2000">
+                            <div class="form-text">每个文本块的最大字符数，建议 512-1024</div>
+                        </div>
+                        <div class="col-md-6 mb-4">
+                            <label class="form-label">分块重叠</label>
+                            <input type="number" class="form-control" name="chunk_overlap" value="50" min="0" max="200">
+                            <div class="form-text">相邻块之间的重叠字符数，建议 50-100</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="submit" class="btn btn-primary">创建</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- 编辑知识库模态框 -->
+<div class="modal fade" id="editKbModal" tabindex="-1" aria-labelledby="editKbModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="editKbModalLabel">编辑知识库</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="editKbForm" onsubmit="updateKb(event)" enctype="multipart/form-data">
+                <input type="hidden" name="kb_id" id="editKbId">
+                <div class="modal-body">
+                    <div class="mb-4">
+                        <label class="form-label">名称 <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" name="name" id="editKbName" required>
+                    </div>
+                    <div class="mb-4">
+                        <label class="form-label">描述</label>
+                        <textarea class="form-control" name="description" id="editKbDescription" rows="3"></textarea>
+                    </div>
+                    <div class="mb-4">
+                        <label class="form-label">封面图片</label>
+                        <div id="editCoverPreview" class="mb-2">
+                            <img id="editCoverPreviewImg" src="" alt="当前封面" class="img-thumbnail"
+                                style="max-width: 200px; max-height: 200px; display: none;">
+                            <div id="editCoverNoImage" class="text-muted small" style="display: none;">暂无封面</div>
+                        </div>
+                        <input type="file" class="form-control" name="cover_image"
+                            accept="image/jpeg,image/png,image/gif,image/webp" id="editCoverImageInput">
+                        <div class="form-text">支持 JPG、PNG、GIF、WEBP 格式，最大 5MB。留空则不修改封面。</div>
+                        <div class="form-check mt-2">
+                            <input class="form-check-input" type="checkbox" name="delete_cover" id="editDeleteCover"
+                                value="true">
+                            <label class="form-check-label" for="editDeleteCover">
+                                删除封面图片
+                            </label>
+                        </div>
+                        <div id="editCoverNewPreview" class="mt-2" style="display: none;">
+                            <img id="editCoverNewPreviewImg" src="" alt="新封面预览" class="img-thumbnail"
+                                style="max-width: 200px; max-height: 200px;">
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-4">
+                            <label class="form-label">分块大小</label>
+                            <input type="number" class="form-control" name="chunk_size" id="editKbChunkSize" value="512"
+                                min="100" max="2000">
+                            <div class="form-text">每个文本块的最大字符数，建议 512-1024</div>
+                        </div>
+                        <div class="col-md-6 mb-4">
+                            <label class="form-label">分块重叠</label>
+                            <input type="number" class="form-control" name="chunk_overlap" id="editKbChunkOverlap"
+                                value="50" min="0" max="200">
+                            <div class="form-text">相邻块之间的重叠字符数，建议 50-100</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="submit" class="btn btn-primary">保存</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    async function createKb(event) {
+        event.preventDefault()
+        const form = event.target
+        const formData = new FormData(form)
+        try {
+            const response = await fetch('/api/v1/kb', {
+                method: 'POST',
+                body: formData//使用FormData的时候不需要再手工指定Content-Type，因为浏览器会自动设置内容类型
+            })
+            if (response.ok) {
+                location.reload()
+            } else {
+                const error = await response.json();
+                alert("创建知识库失败: " + error.message)
+            }
+        } catch (error) {
+            alert("创建知识库失败:" + error.message)
+        }
+    }
+    async function deleteKb(kbId, kbName) {
+        if (!confirm(`确定要删除知识库 "${kbName}" 吗？此操作不可恢复!  `)) {
+            return
+        }
+        try {
+            const response = await fetch(`/api/v1/kb/${kbId}`, {
+                method: 'DELETE'
+            })
+            if (response.ok) {
+                location.reload()
+            } else {
+                const error = await response.json();
+                alert("删除知识库失败: " + error.message)
+            }
+        } catch (error) {
+            alert("删除知识库失败:" + error.message)
+        }
+    }
+    function editKbFromButton(button) {
+        const kbId = button.getAttribute('data-kb-id')
+        const name = button.getAttribute('data-kb-name')
+        const description = button.getAttribute('data-kb-description')
+        const chunkSize = button.getAttribute('data-kb-chunk-size')
+        const chunkOverlap = button.getAttribute('data-kb-chunk-overlap')
+        const coverImage = button.getAttribute('data-kb-cover-image') || ''
+        editKb(kbId, name, description, chunkSize, chunkOverlap, coverImage)
+    }
+    function editKb(kbId, name, description, chunkSize, chunkOverlap, coverImage) {
+        document.getElementById('editKbId').value = kbId
+        document.getElementById('editKbName').value = name
+        document.getElementById('editKbDescription').value = description
+        document.getElementById('editKbChunkSize').value = chunkSize
+        document.getElementById('editKbChunkOverlap').value = chunkOverlap
+        document.getElementById('editDeleteCover').checked = false
+        document.getElementById('editCoverImageInput').value = ''
+
+        const previewImg = document.getElementById('editCoverPreviewImg')
+        const noImageDiv = document.getElementById('editCoverNoImage')
+        const newPreivew = document.getElementById('editCoverNewPreview')
+        const newPreivewImg = document.getElementById('editCoverNewPreviewImg')
+
+        if (newPreivew) {
+            newPreivew.style.display = 'none'
+        }
+        if (newPreivewImg) {
+            newPreivewImg.src = ""
+        }
+        if (coverImage) {
+            previewImg.src = `/kb/${kbId}/cover`
+            previewImg.style.display = 'block'
+            noImageDiv.style.display = 'none'
+        } else {
+            previewImg.style.display = 'none'
+            noImageDiv.style.display = 'block'
+        }
+
+
+        const modal = new bootstrap.Modal(document.getElementById('editKbModal'))
+        modal.show()
+    }
+    async function updateKb(event) {
+        event.preventDefault()
+        const form = event.target
+        const formData = new FormData(form)
+        const kbId = formData.get('kb_id')
+        try {
+            const response = await fetch(`/api/v1/kb/${kbId}`, {
+                method: 'PUT',
+                body: formData//使用FormData的时候不需要再手工指定Content-Type，因为浏览器会自动设置内容类型
+            })
+            if (response.ok) {
+                location.reload()
+            } else {
+                const error = await response.json();
+                alert("更新知识库失败: " + error.message)
+            }
+        } catch (error) {
+            alert("更新知识库失败:" + error.message)
+        }
+    }
+    document.getElementById("coverImageInput")?.addEventListener('change', function (e) {
+        const file = e.target.files[0]
+        const preview = document.getElementById('coverImagePreview')
+        const previewImg = document.getElementById('coverPreviewImg')
+        if (file) {
+            const reader = new FileReader()
+            reader.onload = function (e) {
+                previewImg.src = e.target.result
+                preview.style.display = 'block'
+            }
+            reader.readAsDataURL(file)
+        } else {
+            preview.style.display = 'none'
+        }
+    })
+    document.getElementById("editCoverImageInput")?.addEventListener('change', function (e) {
+        const file = e.target.files[0]
+        const newPreview = document.getElementById('editCoverNewPreview')
+        const newPreviewImg = document.getElementById('editCoverNewPreviewImg')
+        const deleteCheckbox = document.getElementById('editDeleteCover')
+        if (file) {
+            const reader = new FileReader()
+            reader.onload = function (e) {
+                newPreviewImg.src = e.target.result
+                newPreview.style.display = 'block'
+                //当选择新的图片的时候让删除图片的复选框自动取消选择
+                if (deleteCheckbox) {
+                    deleteCheckbox.checked = false
+                }
+            }
+            reader.readAsDataURL(file)
+        } else {
+            newPreview.style.display = 'none'
+        }
+    })
+    document.getElementById("editDeleteCover")?.addEventListener('change', function (e) {
+        const fileInput = document.getElementById("editCoverImageInput")
+        const newPreview = document.getElementById('editCoverNewPreview')
+        if (e.target.checked) {
+            fileInput.value = ''
+            newPreview.style.display = 'none'
+        }
+    })
+
+    function updateSearch() {
+        document.getElementById('searchForm').submit()
+    }
+    function clearSearch() {
+        document.getElementById('searchInput').value = ''
+        //移除搜索参数，保留排序参数
+        const url = new URL(window.location.href)
+        url.searchParams.delete('search')
+        url.searchParams.set('page', 1)
+        window.location.href = url.toString()
+    }
+    document.getElementById('searchInput')?.addEventListener('keypress', function () {
+        if (e.key === 'Enter') {
+            e.preventDefault()
+            updateSearch()
+        }
+    })
+</script>
+{% endblock %}

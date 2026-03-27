@@ -1,0 +1,1932 @@
+{% extends "base.html" %} {% block title %}智能问答系统{% endblock %} {% block header_title %}智能问答{% endblock %} {% block header_actions %}
+<div class="chat-toolbar d-flex flex-wrap align-items-center gap-2 gap-md-3">
+    <div class="d-flex align-items-center gap-2">
+        <label class="chat-toolbar-label mb-0 text-nowrap" for="kbSelect">知识库</label>
+        <select class="form-select form-select-sm chat-toolbar-select" id="kbSelect" onchange="onKbChange()">
+            <option value="">不绑定（普通对话）</option>
+            {% for kb in knowledgebases %}
+            <option value="{{ kb.id }}">{{ kb.name }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="d-flex align-items-center gap-2" id="pipelineToolbarGroup" style="display: none">
+        <label class="chat-toolbar-label mb-0 text-nowrap" for="pipelineModeSelect">模式</label>
+        <select
+            class="form-select form-select-sm chat-toolbar-select chat-toolbar-select-wide"
+            id="pipelineModeSelect"
+            title="知识库问答：检索与生成策略"
+            onchange="updatePipelineUi()"
+        >
+            <option value="vector_generate">向量检索生成</option>
+            <option value="keyword_generate">关键词检索生成</option>
+            <option value="hybrid_generate">混合检索生成</option>
+            <option value="triple_parallel">三路同时</option>
+        </select>
+    </div>
+</div>
+{% endblock %} {% block extra_css %}
+<style>
+    .chat-toolbar {
+        max-width: min(100vw - 6rem, 760px);
+    }
+    .chat-toolbar-label {
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: #6b7280;
+        letter-spacing: 0.02em;
+    }
+    .chat-toolbar-select {
+        min-width: 9rem;
+        max-width: 15rem;
+        border-radius: 10px;
+        border: 1px solid #e5e7eb;
+        font-size: 0.8125rem;
+    }
+    .chat-toolbar-select-wide {
+        min-width: 200px;
+        max-width: 14rem;
+    }
+
+    .chat-container {
+        height: calc(100vh - 65px);
+        display: flex;
+        gap: 0.75rem;
+        padding: 0.7rem 0.85rem;
+        background: #f4f6fb;
+        align-items: stretch;
+    }
+
+    .chat-sidebar {
+        width: 236px;
+        min-width: 0;
+        min-height: 0;
+        flex: 0 0 236px;
+        background: #fff;
+        border-radius: 12px;
+        border: 1px solid #dfe5ef;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        box-shadow: 0 1px 4px rgba(15, 23, 42, 0.05);
+        transition: flex-basis 0.22s ease, width 0.22s ease;
+    }
+
+    .chat-sidebar--collapsed {
+        flex: 0 0 44px;
+        width: 44px;
+    }
+
+    .chat-sidebar-header {
+        padding: 0.45rem;
+        background: #f9fbff;
+        border-bottom: 1px solid #e6ebf3;
+    }
+
+    .chat-sidebar-toolbar {
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+        flex-wrap: nowrap;
+    }
+
+    .chat-sidebar-toolbar .btn {
+        padding: 0.28rem 0.42rem;
+        line-height: 1;
+    }
+
+    .chat-sidebar--collapsed .chat-sidebar-toolbar {
+        flex-direction: column;
+        gap: 0.3rem;
+    }
+
+    .chat-sidebar--collapsed #sidebarToggleBtn {
+        order: -1;
+    }
+
+    .chat-sidebar-subtitle {
+        font-size: 0.7rem;
+        color: #94a3b8;
+        margin-top: 0.35rem;
+        letter-spacing: 0.02em;
+    }
+
+    .chat-sidebar--collapsed .chat-sidebar-subtitle {
+        display: none;
+    }
+
+    .chat-main {
+        flex: 1 1 0;
+        min-width: 0;
+        min-height: 0;
+        background: #fff;
+        border-radius: 12px;
+        border: 1px solid #dfe5ef;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        box-shadow: 0 1px 4px rgba(15, 23, 42, 0.05);
+    }
+
+    .chat-main-header {
+        padding: 0.72rem 1.15rem;
+        background: #fbfcff;
+        border-bottom: 1px solid #e6ebf3;
+        flex-shrink: 0;
+    }
+
+    .chat-main-header .chat-main-title {
+        font-size: 0.95rem;
+        font-weight: 600;
+        color: #0f172a;
+        letter-spacing: -0.02em;
+    }
+
+    .chat-main-subtitle {
+        font-size: 0.78rem;
+        color: #64748b;
+        line-height: 1.45;
+        max-width: 100%;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+
+    .session-list {
+        flex: 1;
+        overflow-y: auto;
+        overflow-x: hidden;
+        padding: 0.5rem 0.45rem 0.7rem;
+    }
+
+    .session-item {
+        padding: 0.44rem 0.48rem;
+        margin-bottom: 0.3rem;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: background 0.2s ease, border-color 0.2s ease;
+        position: relative;
+        background: #f7f9fd;
+        border: 1px solid #edf1f7;
+    }
+
+    .chat-sidebar--collapsed .session-item {
+        padding: 0.25rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 32px;
+    }
+
+    .chat-sidebar--collapsed .session-item-inner {
+        display: none !important;
+    }
+
+    .session-item-avatar {
+        display: none;
+        width: 28px;
+        height: 28px;
+        border-radius: 8px;
+        background: #e2e8f0;
+        color: #475569;
+        font-size: 0.7rem;
+        font-weight: 700;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+
+    .chat-sidebar--collapsed .session-item-avatar {
+        display: flex;
+    }
+
+    .chat-sidebar--collapsed .session-delete {
+        display: none;
+    }
+
+    .session-item:hover {
+        background: #f2f6fc;
+        border-color: #dbe5f3;
+    }
+
+    .session-item.active {
+        background: #eaf2ff;
+        border-color: #bfdbfe;
+        box-shadow: none;
+    }
+
+    .session-item .session-title {
+        font-weight: 600;
+        font-size: 0.8125rem;
+        margin-bottom: 0.1rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        color: #1e293b;
+        padding-right: 1.5rem;
+    }
+
+    .session-item .session-time {
+        font-size: 0.68rem;
+        color: #94a3b8;
+    }
+
+    .session-item .session-delete {
+        position: absolute;
+        top: 0.35rem;
+        right: 0.35rem;
+        opacity: 0;
+        transition: opacity 0.2s;
+        background: white;
+        border-radius: 50%;
+        width: 22px;
+        height: 22px;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+        border: none;
+        z-index: 1;
+    }
+
+    .chat-sidebar:not(.chat-sidebar--collapsed) .session-item .session-delete {
+        display: flex;
+    }
+
+    .chat-sidebar:not(.chat-sidebar--collapsed) .session-item:hover .session-delete {
+        opacity: 1;
+    }
+
+    .chat-sidebar--collapsed .session-list .text-center {
+        padding: 0.75rem 0.25rem !important;
+    }
+
+    .chat-sidebar--collapsed .session-list .text-center i {
+        font-size: 1.1rem !important;
+    }
+
+    .chat-sidebar--collapsed .session-list .text-center p {
+        display: none;
+    }
+
+    .chat-messages {
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+        padding: 1.05rem 1.2rem 1.25rem;
+        scroll-behavior: smooth;
+        background: #f7f9fd;
+    }
+
+    .chat-message {
+        padding: 0.95rem 1.08rem;
+        margin-bottom: 0.85rem;
+        border-radius: 12px;
+        border: 1px solid #e3e9f2;
+        animation: chatSlideIn 0.28s ease;
+        max-width: 100%;
+    }
+
+    @keyframes chatSlideIn {
+        from {
+            opacity: 0;
+            transform: translateY(8px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    .chat-question {
+        background: #2563eb;
+        color: #fff;
+        margin-left: auto;
+        margin-right: 0;
+        max-width: min(84%, 760px);
+        border: none;
+        box-shadow: 0 2px 8px rgba(37, 99, 235, 0.22);
+    }
+
+    .chat-question .chat-bubble-text {
+        font-size: 0.9375rem;
+        line-height: 1.55;
+        word-break: break-word;
+    }
+
+    .chat-question .text-muted {
+        color: rgba(255, 255, 255, 0.75) !important;
+    }
+
+    .chat-answer {
+        background: #fff;
+        color: #0f172a;
+        margin-right: auto;
+        margin-left: 0;
+        max-width: min(96%, 1180px);
+        border-left: 2px solid #bfdbfe;
+        box-shadow: 0 1px 4px rgba(15, 23, 42, 0.04);
+    }
+
+    .chat-role-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: #64748b;
+    }
+
+    .chat-question .chat-role-badge {
+        color: rgba(255, 255, 255, 0.9);
+    }
+
+    .chat-answer-body {
+        margin-top: 0.7rem;
+    }
+
+    .chat-answer-body > .markdown-content {
+        font-size: 0.95rem;
+        line-height: 1.68;
+        color: #1e293b;
+    }
+
+    .chat-answer-body .markdown-content h1,
+    .chat-answer-body .markdown-content h2,
+    .chat-answer-body .markdown-content h3 {
+        font-size: 1.05rem;
+        margin-top: 0.75rem;
+        margin-bottom: 0.5rem;
+        color: #0f172a;
+    }
+
+    .chat-answer-body .markdown-content pre,
+    .chat-answer-body .markdown-content code {
+        font-size: 0.85rem;
+    }
+
+    .chat-answer-body .markdown-content pre {
+        background: #f1f5f9;
+        border-radius: 8px;
+        padding: 0.75rem;
+        border: 1px solid #e2e8f0;
+    }
+
+    .answer-triple-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+        gap: 1rem;
+        width: 100%;
+        align-items: stretch;
+    }
+    .answer-triple-col {
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 0;
+        background: #fff;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+    }
+    .answer-triple-col-head {
+        padding: 0.55rem 0.75rem;
+        background: #f8fafc;
+        border-bottom: 1px solid #e8ecf1;
+        font-size: 0.8rem;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.5rem;
+    }
+    .answer-triple-meta {
+        font-size: 0.68rem;
+        font-weight: 600;
+        color: #64748b;
+        white-space: nowrap;
+    }
+    .answer-triple-col[data-branch="vector"] {
+        border-top: 3px solid #3b82f6;
+    }
+    .answer-triple-col[data-branch="keyword"] {
+        border-top: 3px solid #10b981;
+    }
+    .answer-triple-col[data-branch="hybrid"] {
+        border-top: 3px solid #06b6d4;
+    }
+    .answer-triple-col .answer-triple-md {
+        flex: 1;
+        min-height: 4.2rem;
+        max-height: min(52vh, 480px);
+        overflow-y: auto;
+        font-size: 0.9rem;
+        line-height: 1.68;
+        padding: 0.8rem 0.9rem;
+        color: #334155;
+    }
+    .answer-triple-col .answer-triple-src-wrap {
+        margin-top: 0;
+        border-top: 1px solid #e8ecf1;
+        padding: 0.5rem 0.65rem;
+        max-height: 200px;
+        overflow-y: auto;
+        background: #fafbfc;
+    }
+    .answer-triple-col .answer-triple-src-wrap > .mt-3 {
+        margin-top: 0.25rem !important;
+        padding: 0.5rem !important;
+        background: transparent !important;
+        border: none !important;
+    }
+
+    .chat-input-area {
+        padding: 0.85rem 1.1rem 1rem;
+        border-top: 1px solid #e6ebf3;
+        background: #fbfcff;
+        flex-shrink: 0;
+    }
+
+    .chat-input-label {
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: #64748b;
+        letter-spacing: 0.02em;
+        margin-bottom: 0.35rem;
+    }
+
+    .chat-input-area .form-control,
+    .chat-input-area .form-control-sm {
+        border-radius: 12px;
+        border: 1px solid #d7e0ee;
+        padding: 0.75rem 0.9rem;
+        resize: none;
+        transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        background: #fff;
+    }
+
+    .chat-input-area .form-control:focus,
+    .chat-input-area .form-control-sm:focus {
+        border-color: #3b82f6;
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+    }
+
+    .chat-input-actions {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 0.75rem;
+        margin-top: 0.5rem;
+    }
+
+    .chat-input-hint {
+        font-size: 0.74rem;
+        color: #64748b;
+    }
+
+    .chat-input-area .btn-primary {
+        border-radius: 10px;
+        padding: 0.48rem 1rem;
+        font-weight: 600;
+        font-size: 0.84rem;
+        background: #2563eb;
+        border: 1px solid #1d4ed8;
+        box-shadow: none;
+    }
+
+    .chat-input-area .btn-primary:hover {
+        filter: brightness(1.05);
+        transform: translateY(-1px);
+    }
+
+    .empty-state {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 220px;
+        padding: 2rem 1rem;
+        color: #64748b;
+        text-align: center;
+    }
+
+    .empty-state i {
+        color: #94a3b8;
+        opacity: 0.85;
+        margin-bottom: 0.5rem;
+    }
+
+    .empty-state p {
+        font-size: 0.9rem;
+        margin: 0;
+    }
+
+    .chat-sources-block {
+        font-size: 0.8125rem;
+        border-radius: 10px !important;
+    }
+    .chat-sources-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.5rem;
+    }
+    .chat-sources-toggle {
+        border: 1px solid #dbe3ee;
+        background: #fff;
+        color: #475569;
+        border-radius: 8px;
+        font-size: 0.74rem;
+        font-weight: 600;
+        padding: 0.2rem 0.5rem;
+        line-height: 1.2;
+    }
+    .chat-sources-toggle:hover {
+        background: #f8fafc;
+    }
+    .chat-sources-body {
+        display: none;
+        margin-top: 0.5rem;
+    }
+
+    .chat-source-item {
+        margin-bottom: 0.5rem !important;
+        padding: 0.5rem 0.65rem !important;
+        border-radius: 8px !important;
+        background: #fff !important;
+        border: 1px solid #e8ecf1 !important;
+    }
+    .chat-source-item--highlight {
+        border-color: #f59e0b !important;
+        box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.2);
+        transition: box-shadow 0.2s ease, border-color 0.2s ease;
+    }
+    .inline-citation-ref {
+        cursor: pointer;
+        color: #0f766e;
+        font-weight: 700;
+        margin-left: 0.12rem;
+    }
+    .inline-citation-ref:hover {
+        text-decoration: underline;
+    }
+    .eval-panel {
+        margin-top: 0.55rem;
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        background: #f8fafc;
+        padding: 0.45rem 0.55rem;
+    }
+    .eval-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    .eval-title {
+        font-size: 0.72rem;
+        font-weight: 700;
+        color: #475569;
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+    }
+    .eval-toggle {
+        border: 1px solid #dbe3ee;
+        background: #fff;
+        color: #475569;
+        border-radius: 8px;
+        font-size: 0.68rem;
+        font-weight: 700;
+        padding: 0.12rem 0.46rem;
+        line-height: 1.2;
+    }
+    .eval-toggle:hover {
+        background: #f1f5f9;
+    }
+    .eval-body {
+        display: none;
+        margin-top: 0.35rem;
+    }
+    .eval-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+        gap: 0.3rem 0.5rem;
+    }
+    .eval-item {
+        font-size: 0.7rem;
+        color: #334155;
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        padding: 0.22rem 0.4rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 0.4rem;
+    }
+    .eval-item .label {
+        color: #64748b;
+    }
+    .eval-item .value {
+        font-weight: 700;
+        color: #0f172a;
+    }
+    .answer-triple-col.recommended {
+        box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.35), 0 4px 14px rgba(245, 158, 11, 0.12);
+    }
+
+    .chat-sidebar .btn {
+        border-radius: 8px;
+        font-weight: 600;
+        font-size: 0.8125rem;
+    }
+
+    .chat-sidebar .btn-primary {
+        background: #2563eb;
+        border: 1px solid #1d4ed8;
+    }
+
+    .chat-sidebar .btn-outline-danger {
+        border-color: #fecaca;
+        color: #b91c1c;
+    }
+
+    .chat-sidebar .btn-outline-danger:hover {
+        background: #fef2f2;
+    }
+
+    @media (max-width: 768px) {
+        .chat-container {
+            flex-direction: column;
+            padding: 0.45rem;
+            height: auto;
+            min-height: calc(100vh - 65px);
+        }
+
+        .chat-sidebar {
+            width: 100% !important;
+            flex: 0 0 auto !important;
+            max-height: 200px;
+        }
+
+        .chat-sidebar--collapsed {
+            max-height: 56px;
+        }
+
+        .chat-sidebar--collapsed .session-list {
+            display: none;
+        }
+
+        .chat-question,
+        .chat-answer {
+            max-width: 100%;
+            margin-left: 0;
+            margin-right: 0;
+        }
+
+        .chat-input-area {
+            padding: 0.72rem 0.9rem 0.92rem;
+        }
+
+        .answer-triple-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    @media (max-width: 1200px) {
+        .answer-triple-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+    }
+    @media (max-width: 980px) {
+        .answer-triple-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+{% endblock %} {% block content %}
+<div class="chat-container">
+    <!-- 左侧：会话（默认窄条，可收起为图标栏） -->
+    <aside class="chat-sidebar" id="chatSidebar" aria-label="会话列表">
+        <div class="chat-sidebar-header">
+            <div class="chat-sidebar-toolbar">
+                <button
+                    type="button"
+                    class="btn btn-sm btn-light border"
+                    id="sidebarToggleBtn"
+                    title="收起侧边栏"
+                    aria-expanded="true"
+                    aria-controls="sessionList"
+                >
+                    <i class="bi bi-chevron-double-left" aria-hidden="true"></i>
+                </button>
+                <button class="btn btn-sm btn-primary" type="button" onclick="createNewSession()" title="新建会话">
+                    <i class="bi bi-plus-lg"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-danger" type="button" onclick="clearAllSessions()" title="清空全部会话">
+                    <i class="bi bi-trash"></i>
+                </button>
+            </div>
+            <div class="chat-sidebar-subtitle">会话</div>
+        </div>
+        <div class="session-list" id="sessionList">
+            <div class="text-center text-muted py-4">
+                <i class="bi bi-chat-left-text" style="font-size: 1.75rem"></i>
+                <p class="mt-2 small mb-0">暂无会话</p>
+            </div>
+        </div>
+    </aside>
+
+    <!-- 右侧：对话（主区域） -->
+    <div class="chat-main">
+        <div class="chat-main-header">
+            <h6 class="chat-main-title mb-0"><i class="bi bi-chat-dots text-primary"></i> 对话</h6>
+            <p class="chat-main-subtitle mt-1 mb-0">
+                在顶部选择知识库和模式后，直接在下方输入问题即可开始。
+            </p>
+        </div>
+
+        <div class="chat-messages" id="chatMessages">
+            <div class="empty-state">
+                <i class="bi bi-chat-left-text" style="font-size: 2.75rem"></i>
+                <p class="mt-2 small">还没有消息，输入一个明确问题开始对话</p>
+            </div>
+        </div>
+
+        <div class="chat-input-area">
+            <form id="chatForm" onsubmit="askQuestion(event)">
+                <div class="mb-2" id="ragContextWrap" style="display: none">
+                    <div class="chat-input-label">文档上下文</div>
+                    <p class="small text-muted mb-1">仅在「仅生成」模式下使用，不触发向量库检索</p>
+                    <textarea
+                        class="form-control form-control-sm"
+                        id="ragContextInput"
+                        rows="3"
+                        placeholder="粘贴或编辑要作为依据的正文…"
+                    ></textarea>
+                </div>
+                <div class="mb-2">
+                    <div class="chat-input-label">输入问题</div>
+                    <textarea
+                        class="form-control"
+                        id="questionInput"
+                        rows="3"
+                        placeholder="例如：请总结该知识库中关于检索策略的最佳实践"
+                        required
+                        onkeydown="
+                            if (event.key === 'Enter' && !event.shiftKey) {
+                                event.preventDefault();
+                                askQuestion(event);
+                            }
+                        "
+                    ></textarea>
+                </div>
+                <div class="chat-input-actions">
+                    <div class="chat-input-hint">Enter 发送，Shift + Enter 换行</div>
+                    <button type="submit" class="btn btn-primary" id="submitBtn"><i class="bi bi-send-fill me-1"></i>发送</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %} {% block extra_js %}
+<script>
+    //定义一个变量记录完整的回答内容
+    let fullAnswer = "";
+    //标记渲染任务是否挂起,这是为了防止重复渲染
+    let pendingUpdate = false;
+    //当前会话的ID,初始化为null,表示暂时未选择任何会话
+    let currentSessionId = null;
+    //会话列表,初始为空数组,用于存储所有的会话对象
+    let sessions = [];
+    //当前知识库的ID，初始值为null,表示没有选择任何的知识库
+    let currentKbId = null;
+    // 记录每个会话最后一次使用的 pipeline mode（仅前端记忆）
+    let sessionPipelineModes = {};
+    const SESSION_MODE_STORAGE_KEY = "chat_session_pipeline_modes_v1";
+    const PIPELINE_MODE_DEFAULT = "hybrid_generate";
+    const ALLOWED_PIPELINE_MODES = new Set([
+        "vector_generate",
+        "keyword_generate",
+        "hybrid_generate",
+        "triple_parallel",
+    ]);
+    //为字符串进行HTML转义，防止XSS攻击
+    function escapeHtml(text) {
+        const div = document.createElement("div");
+        div.textContent = text;
+        return div.innerHTML;
+    }
+    function scrollToBottom() {
+        //获取消息聊天区域的容器元素
+        const chatMessages = document.getElementById("chatMessages");
+        //设置滚动条的位置到底部
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+    function getPipelineModeSelect() {
+        return document.getElementById("pipelineModeSelect");
+    }
+    function loadSessionModeCache() {
+        try {
+            const raw = localStorage.getItem(SESSION_MODE_STORAGE_KEY);
+            if (!raw) return;
+            const parsed = JSON.parse(raw);
+            if (parsed && typeof parsed === "object") {
+                sessionPipelineModes = parsed;
+            }
+        } catch (e) {
+            sessionPipelineModes = {};
+        }
+    }
+    function saveSessionModeCache() {
+        try {
+            localStorage.setItem(SESSION_MODE_STORAGE_KEY, JSON.stringify(sessionPipelineModes));
+        } catch (e) {}
+    }
+    function setSessionMode(sessionId, mode) {
+        if (!sessionId || !mode || !ALLOWED_PIPELINE_MODES.has(mode)) return;
+        sessionPipelineModes[sessionId] = mode;
+        saveSessionModeCache();
+    }
+    function getSessionMode(sessionId) {
+        if (!sessionId) return "";
+        return sessionPipelineModes[sessionId] || "";
+    }
+    function decorateInlineCitations(text) {
+        if (!text) return "";
+        return String(text).replace(/\[\^(\d{1,3})\]/g, (_, idx) => {
+            return `<sup class="inline-citation-ref" data-citation-index="${idx}" title="查看引用来源 ${idx}">[${idx}]</sup>`;
+        });
+    }
+    function renderMarkdown(text) {
+        return marked.parse(decorateInlineCitations(text || ""));
+    }
+    function renderMarkdownToElement(element, text) {
+        if (!text) {
+            element.innerHTML = '<i class="bi bi-hourglass-split"></i>思考中...';
+            return;
+        }
+        element.innerHTML = renderMarkdown(text);
+    }
+    // 用于格式化时间字符串为友好显示
+    function formatTime(timeStr) {
+        // 如果无有效时间，直接返回空字符串
+        if (!timeStr) return "";
+        // 将字符串转换为Date对象
+        const date = new Date(timeStr);
+        // 获取当前时间
+        const now = new Date();
+        // 计算时间差（毫秒）
+        const diff = now - date;
+        // 换算为分钟数
+        const minutes = Math.floor(diff / 60000);
+        // 换算为小时数
+        const hours = Math.floor(diff / 3600000);
+        // 换算为天数
+        const days = Math.floor(diff / 86400000);
+        // 1分钟内显示“刚刚”
+        if (minutes < 1) return "刚刚";
+        // 1小时内显示“x分钟前”
+        if (minutes < 60) return `${minutes}分钟前`;
+        // 24小时内显示“x小时前”
+        if (hours < 24) return `${hours}小时前`;
+        // 7天内显示“x天前”
+        if (days < 7) return `${days}天前`;
+        // 超过7天显示具体日期
+        return date.toLocaleDateString();
+    }
+    async function clearChatMessages(params) {
+        document.getElementById("chatMessages").innerHTML = `
+             <div class="empty-state">
+                 <i class="bi bi-chat-left-text" style="font-size: 2.75rem;"></i>
+                 <p class="mt-2 small">还没有消息，输入一个明确问题开始对话</p>
+             </div>
+         `;
+    }
+    async function clearAllSessions() {
+        if (!confirm("确定要删除你所有的会话吗?此操作不可恢复!")) return;
+        try {
+            const response = await fetch(`/api/v1/sessions`, { method: "DELETE" });
+            const result = await response.json();
+            //如果返回状态码为200,说明删除会话成功,
+            if (result.code == 200) {
+                currentSessionId = null;
+                clearChatMessages();
+                await loadSessions();
+            } else {
+                alert("删除会话失败:" + result.message);
+            }
+        } catch (error) {
+            alert("删除会话失败:" + error.message);
+        }
+    }
+    async function deleteSession(sessionId) {
+        if (!confirm("确定要删除这个会话吗?此操作不可恢复!")) return;
+        try {
+            const response = await fetch(`/api/v1/sessions/${sessionId}`, { method: "DELETE" });
+            const result = await response.json();
+            //如果返回状态码为200,说明删除会话成功,
+            if (result.code == 200) {
+                //如果删除的是当前会话的话,清除当前的会话ID和聊天信息
+                if (currentSessionId == sessionId) {
+                    currentSessionId = null;
+                    clearChatMessages();
+                }
+                await loadSessions();
+            } else {
+                alert("删除会话失败:" + result.message);
+            }
+        } catch (error) {
+            alert("删除会话失败:" + error.message);
+        }
+    }
+    async function renderSessions() {
+        const sessionList = document.getElementById("sessionList");
+        if (sessions.length == 0) {
+            sessionList.innerHTML = `
+                 <div class="text-center text-muted py-4">
+                      <i class="bi bi-chat-left-text" style="font-size: 1.75rem;"></i>
+                      <p class="mt-2 small mb-0">暂无会话</p>
+                  </div>
+             `;
+            return;
+        }
+        sessionList.innerHTML = sessions
+            ?.map((session) => {
+                const title = session.title || "新对话";
+                const initial = title.length ? title.slice(0, 1) : "?";
+                return `
+        <div class="session-item ${session.id === currentSessionId ? "active" : ""}"
+             onclick="loadSession('${session.id}')"
+             title="${escapeHtml(title)}">
+            <button type="button" class="btn btn-sm btn-link text-danger p-0 session-delete"
+                    onclick="event.stopPropagation(); deleteSession('${session.id}')">
+                <i class="bi bi-x-lg"></i>
+            </button>
+            <span class="session-item-avatar">${escapeHtml(initial)}</span>
+            <div class="session-item-inner">
+                <div class="session-title">${escapeHtml(title)}</div>
+                <div class="session-time">${formatTime(session.updated_at)}</div>
+            </div>
+        </div>
+    `;
+            })
+            .join("");
+    }
+    function formatElapsedForUi(ms) {
+        const n = Number(ms);
+        if (!Number.isFinite(n) || n < 0) return "--";
+        return `${Math.round(n)}ms`;
+    }
+
+    function buildTripleMetaText(meta) {
+        const retrieved = Number(meta?.retrieved_chunks);
+        const retrievedText = Number.isFinite(retrieved) ? retrieved : "--";
+        const retrievalText = formatElapsedForUi(meta?.retrieval_elapsed_ms);
+        const generationText = formatElapsedForUi(meta?.generation_elapsed_ms);
+        return `检索 ${retrievedText}条/${retrievalText} | 生成 ${generationText}`;
+    }
+
+    // 历史消息渲染也会用到评估渲染工具，需放在全局作用域
+    const EVAL_LABELS = {
+        "hit@1": { short: "H@1", full: "Hit Rate @1（Top-1 命中率）" },
+        "precision@1": { short: "P@1", full: "Precision @1（Top-1 精确率）" },
+        "recall@1": { short: "R@1", full: "Recall @1（Top-1 召回率）" },
+        "hit@3": { short: "H@3", full: "Hit Rate @3（Top-3 命中率）" },
+        "precision@3": { short: "P@3", full: "Precision @3（Top-3 精确率）" },
+        "recall@3": { short: "R@3", full: "Recall @3（Top-3 召回率）" },
+        exact_match: { short: "EM", full: "Exact Match（完全匹配）" },
+        token_f1: { short: "F1", full: "Token-level F1（词级 F1）" },
+        semantic_similarity: { short: "SIM", full: "Semantic Similarity（语义相似度）" },
+        citation_coverage: { short: "COV", full: "Citation Coverage（引用覆盖率）" },
+        citation_consistency: { short: "CONS", full: "Citation Consistency（引用一致性）" },
+        request_elapsed_ms: { short: "Req", full: "Request Elapsed (ms)（请求总耗时）" },
+        pipeline_elapsed_ms: { short: "Pipe", full: "Pipeline Elapsed (ms)（流水线耗时）" },
+        retrieval_elapsed_ms: { short: "Ret", full: "Retrieval Elapsed (ms)（检索耗时）" },
+        generation_elapsed_ms: { short: "Gen", full: "Generation Elapsed (ms)（生成耗时）" },
+        branch_score: { short: "Score", full: "Branch Score（分支综合评分）" },
+    };
+
+    function evalLabelMeta(key) {
+        const item = EVAL_LABELS[key];
+        if (!item) return { short: key, full: key };
+        if (typeof item === "string") return { short: item, full: key };
+        return { short: item.short || key, full: item.full || key };
+    }
+
+    function evalLabel(key) {
+        return evalLabelMeta(key).short;
+    }
+
+    function fmtMetric(value, isPercent = true) {
+        const n = Number(value);
+        if (!Number.isFinite(n)) return "--";
+        if (isPercent) return `${Math.round(n * 100)}%`;
+        return `${Math.round(n)}ms`;
+    }
+
+    function buildEvalItems(metrics, keys, isPercent = true) {
+        return keys
+            .filter((k) => metrics && metrics[k] !== undefined)
+            .map(
+                (k) => `
+                <div class="eval-item">
+                    <span class="label" title="${escapeHtml(evalLabelMeta(k).full)}">${evalLabel(k)}</span>
+                    <span class="value">${fmtMetric(metrics[k], isPercent)}</span>
+                </div>
+            `
+            )
+            .join("");
+    }
+
+    function makeEvalPanelHtml(title, bodyHtml, prefix = "eval") {
+        if (!bodyHtml || !bodyHtml.trim()) return "";
+        const bodyId = `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+        return `
+            <div class="eval-panel">
+                <div class="eval-header">
+                    <div class="eval-title"><i class="bi bi-clipboard2-data"></i> ${title}</div>
+                    <button type="button" class="eval-toggle" data-eval-toggle="${bodyId}" aria-expanded="false">展开</button>
+                </div>
+                <div class="eval-body" id="${bodyId}">
+                    <div class="eval-grid">${bodyHtml}</div>
+                </div>
+            </div>
+        `;
+    }
+
+    function isTripleStoredSources(sources) {
+        if (!sources || typeof sources !== "object" || Array.isArray(sources)) return false;
+        const v = sources.vector;
+        const k = sources.keyword;
+        const h = sources.hybrid;
+        if (!v || !k || !h) return false;
+        if (typeof v !== "object" || typeof v.answer !== "string") return false;
+        return true;
+    }
+
+    function normalizeStoredAssistantPayload(rawSources) {
+        if (
+            rawSources &&
+            typeof rawSources === "object" &&
+            !Array.isArray(rawSources) &&
+            rawSources.__rag_payload_v1
+        ) {
+            return {
+                sources: rawSources.sources ?? null,
+                evaluation: rawSources.evaluation ?? null,
+                metadata: rawSources.metadata ?? {},
+            };
+        }
+        return { sources: rawSources, evaluation: null, metadata: {} };
+    }
+
+    function buildEvaluationSingleItems(evaluation) {
+        const rq = evaluation?.retrieval_quality || {};
+        const aq = evaluation?.answer_quality || {};
+        const rf = evaluation?.relevance_faithfulness || {};
+        const ef = evaluation?.efficiency || {};
+        return `
+            ${buildEvalItems(rq, ["hit@1", "precision@1", "recall@1", "hit@3", "precision@3", "recall@3"])}
+            ${buildEvalItems(aq, ["exact_match", "token_f1", "semantic_similarity"])}
+            ${buildEvalItems(rf, ["citation_coverage", "citation_consistency"])}
+            ${buildEvalItems(ef, ["request_elapsed_ms", "pipeline_elapsed_ms"], false)}
+        `;
+    }
+
+    function buildEvaluationTripleBranchItems(detail, score) {
+        return `
+            ${buildEvalItems(detail?.retrieval_quality || {}, ["hit@1", "precision@1", "recall@1", "hit@3"])}
+            ${buildEvalItems(detail?.answer_quality || {}, ["exact_match", "token_f1", "semantic_similarity"])}
+            ${buildEvalItems(detail?.relevance_faithfulness || {}, ["citation_coverage", "citation_consistency"])}
+            ${buildEvalItems(detail?.efficiency || {}, ["retrieval_elapsed_ms", "generation_elapsed_ms"], false)}
+            ${
+                score !== undefined && score !== null
+                    ? `<div class="eval-item"><span class="label" title="${escapeHtml(evalLabelMeta("branch_score").full)}">${evalLabel("branch_score")}</span><span class="value">${fmtMetric(
+                          score,
+                          true
+                      )}</span></div>`
+                    : ""
+            }
+        `;
+    }
+
+    function renderTripleHistoryAnswer(msg, triple, evaluation) {
+        const time = formatTime(msg.created_at);
+        const branches = [
+            { key: "vector", label: "向量检索", icon: "bi-layers", color: "text-primary" },
+            { key: "keyword", label: "关键词检索", icon: "bi-key", color: "text-success" },
+            { key: "hybrid", label: "混合检索", icon: "bi-git-merge", color: "text-info" },
+        ];
+        const recommendedBranch = evaluation?.recommended_branch;
+        const cols = branches
+            .map((b) => {
+                const data = triple[b.key] || { answer: "", sources: [] };
+                const metaText = buildTripleMetaText(data);
+                const detail = evaluation?.branch_metrics?.[b.key] || null;
+                const score = evaluation?.branch_scores?.[b.key];
+                const evalTitle = recommendedBranch === b.key ? "评估 · 推荐" : "评估";
+                const evalItems = buildEvaluationTripleBranchItems(detail, score);
+                const evalHtml = makeEvalPanelHtml(evalTitle, evalItems, `eval_history_${b.key}`);
+                const answerHtml = data.answer
+                    ? renderMarkdown(data.answer)
+                    : '<p class="text-muted small mb-0">—</p>';
+                const srcHtml =
+                    data.sources && data.sources.length
+                        ? generateSourcesHTML(data.sources, { retrieval_mode: b.key }, currentKbId)
+                        : "";
+                return `
+            <div class="answer-triple-col ${recommendedBranch === b.key ? "recommended" : ""}" data-branch="${b.key}">
+                <div class="answer-triple-col-head ${b.color} fw-semibold small mb-1">
+                    <span><i class="bi ${b.icon}"></i> ${b.label}</span>
+                    <span class="answer-triple-meta" data-role="meta">${metaText}</span>
+                </div>
+                <div class="markdown-content answer-triple-md">${answerHtml}</div>
+                <div class="answer-triple-src-wrap">${evalHtml}${srcHtml}</div>
+            </div>`;
+            })
+            .join("");
+        return `
+        <div class="chat-message chat-answer">
+            <div class="d-flex justify-content-between align-items-center mb-1">
+                <span class="chat-role-badge"><i class="bi bi-robot"></i> 助手</span>
+                <small class="text-muted">${time}</small>
+            </div>
+            <div class="chat-answer-body">
+                <div class="answer-triple-grid mt-2">${cols}</div>
+            </div>
+        </div>`;
+    }
+
+    // 渲染消息（刷新后从历史接口加载时，三路并行需根据 sources 结构还原并排布局）
+    function renderMessages(messages) {
+        const chatMessages = document.getElementById("chatMessages");
+
+        if (messages.length === 0) {
+            chatMessages.innerHTML = `
+             <div class="empty-state">
+                 <i class="bi bi-chat-left-text" style="font-size: 3rem;"></i>
+                 <p class="mt-2">开始提问吧！</p>
+             </div>
+         `;
+            return;
+        }
+
+        chatMessages.innerHTML = messages
+            .map((msg) => {
+                if (msg.role === "user") {
+                    return `
+                 <div class="chat-message chat-question">
+                     <div class="d-flex justify-content-between align-items-start gap-2">
+                         <div class="flex-grow-1">
+                             <span class="chat-role-badge"><i class="bi bi-person-circle"></i> 你</span>
+                             <div class="chat-bubble-text mt-2">${escapeHtml(msg.content)}</div>
+                         </div>
+                         <small class="text-muted flex-shrink-0">${formatTime(msg.created_at)}</small>
+                     </div>
+                 </div>
+             `;
+                }
+                const payload = normalizeStoredAssistantPayload(msg.sources);
+                const storedSources = payload.sources;
+                const storedEvaluation = payload.evaluation;
+                if (isTripleStoredSources(storedSources)) {
+                    return renderTripleHistoryAnswer(msg, storedSources, storedEvaluation);
+                }
+                let extraSources = "";
+                if (storedSources && Array.isArray(storedSources) && storedSources.length) {
+                    extraSources = generateSourcesHTML(storedSources, payload.metadata || {}, currentKbId);
+                }
+                const evalHtml = storedEvaluation
+                    ? makeEvalPanelHtml("评估", buildEvaluationSingleItems(storedEvaluation), "eval_history_single")
+                    : "";
+                return `
+                 <div class="chat-message chat-answer">
+                     <div class="d-flex justify-content-between align-items-center mb-1">
+                         <span class="chat-role-badge"><i class="bi bi-robot"></i> 助手</span>
+                         <small class="text-muted">${formatTime(msg.created_at)}</small>
+                     </div>
+                     <div class="chat-answer-body">
+                         <div class="markdown-content">${renderMarkdown(msg.content)}</div>
+                         ${evalHtml}
+                         ${extraSources}
+                     </div>
+                 </div>
+             `;
+            })
+            .join("");
+
+        scrollToBottom();
+    }
+    async function loadSession(sessionId) {
+        try {
+            const response = await fetch(`/api/v1/sessions/${sessionId}`);
+            const result = await response.json();
+            //如果返回状态码为200,说明创建会话成功,切换到新的会话
+            if (result.code == 200) {
+                //设置当前会话的ID为传入的sessionId
+                currentSessionId = sessionId;
+                //会话对象
+                const session = result.data.session;
+                const kbSel = document.getElementById("kbSelect");
+                if (session.kb_id && kbSel) {
+                    currentKbId = session.kb_id;
+                    kbSel.value = session.kb_id;
+                } else {
+                    currentKbId = null;
+                    if (kbSel) kbSel.value = "";
+                }
+                const pm = getPipelineModeSelect();
+                if (pm) {
+                    const rememberedMode = getSessionMode(sessionId);
+                    pm.value = ALLOWED_PIPELINE_MODES.has(rememberedMode)
+                        ? rememberedMode
+                        : PIPELINE_MODE_DEFAULT;
+                }
+                updatePipelineUi();
+                //此会话对应的消息列表
+                const messages = result.data.messages || [];
+                //将消息列表渲染到页面上
+                renderMessages(messages);
+                await loadSessions();
+            }
+        } catch (error) {
+            alert("加载会话列表失败:" + error.message);
+        }
+    }
+    async function loadSessions() {
+        try {
+            const response = await fetch("/api/v1/sessions");
+            const result = await response.json();
+            //如果返回状态码为200,说明创建会话成功,切换到新的会话
+            if (result.code == 200) {
+                sessions = result.data.items || [];
+                renderSessions();
+            }
+        } catch (error) {
+            alert("加载会话列表失败:" + error.message);
+        }
+    }
+    async function createNewSession() {
+        try {
+            const response = await fetch("/api/v1/sessions", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({}),
+            });
+            const result = await response.json();
+            //如果返回状态码为200,说明创建会话成功,切换到新的会话
+            if (result.code == 200) {
+                currentSessionId = result.data.id;
+                //重新加载最新的会话列表
+                await loadSessions();
+                //清空聊天消息
+                //clearChatMessages()
+            }
+        } catch (error) {
+            alert("创建会话失败:" + error.message);
+        }
+    }
+
+    async function askQuestion(event) {
+        event.preventDefault();
+        const question = document.getElementById("questionInput").value.trim();
+        const chatMessages = document.getElementById("chatMessages");
+        if (!question) return;
+        if (chatMessages.querySelector(".empty-state")) {
+            chatMessages.innerHTML = "";
+        }
+        const questionDiv = document.createElement("div");
+        questionDiv.className = "chat-message chat-question";
+        // 构建用户气泡内容含图标、文本和时间
+        questionDiv.innerHTML = `
+         <div class="d-flex justify-content-between align-items-start gap-2">
+             <div class="flex-grow-1">
+                 <span class="chat-role-badge"><i class="bi bi-person-circle"></i> 你</span>
+                 <div class="chat-bubble-text mt-2">${escapeHtml(question)}</div>
+             </div>
+             <small class="text-muted flex-shrink-0">${new Date().toLocaleTimeString()}</small>
+         </div>
+         `;
+        chatMessages.appendChild(questionDiv);
+
+        //创建用于显示答案的DIV元素
+        const answerDiv = document.createElement("div");
+        answerDiv.className = "chat-message chat-answer";
+        //动态生成唯一答案的内容div id 用于唯一标识
+        const answerContentId = `answerContent_` + Date.now() + "_" + Math.random().toString(36).substr(2, 9);
+        const answerContent = document.createElement("div");
+        answerContent.className = "markdown-content";
+        answerContent.id = answerContentId;
+        // 答案div显示机器人图标和时间
+        answerDiv.innerHTML = `
+             <div class="d-flex justify-content-between align-items-center mb-1">
+                 <span class="chat-role-badge"><i class="bi bi-robot"></i> 助手</span>
+                 <small class="text-muted">${new Date().toLocaleTimeString()}</small>
+             </div>
+             <div class="chat-answer-body"></div>
+         `;
+        const answerBody = answerDiv.querySelector(".chat-answer-body");
+        answerBody.appendChild(answerContent);
+        chatMessages.appendChild(answerDiv);
+
+        let tripleMode = false;
+        let tripleRefs = null;
+        const branchAnswers = { vector: "", keyword: "", hybrid: "" };
+        let tripleRenderPending = false;
+
+        function tripleGridHtml() {
+            const cols = [
+                { key: "vector", label: "向量检索", icon: "bi-layers", color: "text-primary" },
+                { key: "keyword", label: "关键词检索", icon: "bi-key", color: "text-success" },
+                { key: "hybrid", label: "混合检索", icon: "bi-git-merge", color: "text-info" },
+            ];
+            return cols
+                .map(
+                    (c) => `
+                <div class="answer-triple-col" data-branch="${c.key}">
+                    <div class="answer-triple-col-head ${c.color} fw-semibold small mb-1">
+                        <span><i class="bi ${c.icon}"></i> ${c.label}</span>
+                        <span class="answer-triple-meta" data-role="meta">检索 -- | 生成 --</span>
+                    </div>
+                    <div class="markdown-content answer-triple-md"><i class="bi bi-hourglass-split"></i> 思考中…</div>
+                    <div class="answer-triple-src-wrap"></div>
+                </div>`
+                )
+                .join("");
+        }
+
+        function wireTripleRefs() {
+            const refs = {};
+            answerContent.querySelectorAll(".answer-triple-col").forEach((col) => {
+                const b = col.getAttribute("data-branch");
+                refs[b] = {
+                    md: col.querySelector(".answer-triple-md"),
+                    srcWrap: col.querySelector(".answer-triple-src-wrap"),
+                    meta: col.querySelector('[data-role="meta"]'),
+                };
+            });
+            return refs;
+        }
+
+        function updateTripleMeta(branch, metadata) {
+            if (!tripleRefs || !tripleRefs[branch] || !tripleRefs[branch].meta) return;
+            tripleRefs[branch].meta.textContent = buildTripleMetaText(metadata);
+        }
+
+        function fmtMetric(value, isPercent = true) {
+            const n = Number(value);
+            if (!Number.isFinite(n)) return "--";
+            if (isPercent) return `${Math.round(n * 100)}%`;
+            return `${Math.round(n)}ms`;
+        }
+
+        const EVAL_LABELS = {
+            "hit@1": { short: "H@1", full: "Hit Rate @1（Top-1 命中率）" },
+            "precision@1": { short: "P@1", full: "Precision @1（Top-1 精确率）" },
+            "recall@1": { short: "R@1", full: "Recall @1（Top-1 召回率）" },
+            "hit@3": { short: "H@3", full: "Hit Rate @3（Top-3 命中率）" },
+            "precision@3": { short: "P@3", full: "Precision @3（Top-3 精确率）" },
+            "recall@3": { short: "R@3", full: "Recall @3（Top-3 召回率）" },
+            exact_match: { short: "EM", full: "Exact Match（完全匹配）" },
+            token_f1: { short: "F1", full: "Token-level F1（词级 F1）" },
+            semantic_similarity: { short: "SIM", full: "Semantic Similarity（语义相似度）" },
+            citation_coverage: { short: "COV", full: "Citation Coverage（引用覆盖率）" },
+            citation_consistency: { short: "CONS", full: "Citation Consistency（引用一致性）" },
+            request_elapsed_ms: { short: "Req", full: "Request Elapsed (ms)（请求总耗时）" },
+            pipeline_elapsed_ms: { short: "Pipe", full: "Pipeline Elapsed (ms)（流水线耗时）" },
+            retrieval_elapsed_ms: { short: "Ret", full: "Retrieval Elapsed (ms)（检索耗时）" },
+            generation_elapsed_ms: { short: "Gen", full: "Generation Elapsed (ms)（生成耗时）" },
+            branch_score: { short: "Score", full: "Branch Score（分支综合评分）" },
+        };
+
+        function evalLabelMeta(key) {
+            const item = EVAL_LABELS[key];
+            if (!item) return { short: key, full: key };
+            if (typeof item === "string") return { short: item, full: key };
+            return { short: item.short || key, full: item.full || key };
+        }
+
+        function evalLabel(key) {
+            return evalLabelMeta(key).short;
+        }
+
+        function buildEvalItems(metrics, keys, isPercent = true) {
+            return keys
+                .filter((k) => metrics && metrics[k] !== undefined)
+                .map(
+                    (k) => `
+                    <div class="eval-item">
+                        <span class="label" title="${escapeHtml(evalLabelMeta(k).full)}">${evalLabel(k)}</span>
+                        <span class="value">${fmtMetric(metrics[k], isPercent)}</span>
+                    </div>
+                `
+                )
+                .join("");
+        }
+
+        function makeEvalPanelHtml(title, bodyHtml, prefix = "eval") {
+            if (!bodyHtml || !bodyHtml.trim()) return "";
+            const bodyId = `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+            return `
+                <div class="eval-panel">
+                    <div class="eval-header">
+                        <div class="eval-title"><i class="bi bi-clipboard2-data"></i> ${title}</div>
+                        <button type="button" class="eval-toggle" data-eval-toggle="${bodyId}" aria-expanded="false">展开</button>
+                    </div>
+                    <div class="eval-body" id="${bodyId}">
+                        <div class="eval-grid">${bodyHtml}</div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderEvaluationSingle(evaluation, targetParent, { prepend = false } = {}) {
+            if (!evaluation || !targetParent) return;
+            const rq = evaluation.retrieval_quality || {};
+            const aq = evaluation.answer_quality || {};
+            const rf = evaluation.relevance_faithfulness || {};
+            const ef = evaluation.efficiency || {};
+            const items = `
+                ${buildEvalItems(rq, ["hit@1", "precision@1", "recall@1", "hit@3", "precision@3", "recall@3"])}
+                ${buildEvalItems(aq, ["exact_match", "token_f1", "semantic_similarity"])}
+                ${buildEvalItems(rf, ["citation_coverage", "citation_consistency"])}
+                ${buildEvalItems(ef, ["request_elapsed_ms", "pipeline_elapsed_ms"], false)}
+            `;
+            const html = makeEvalPanelHtml("评估", items, "eval_single");
+            if (prepend) targetParent.insertAdjacentHTML("afterbegin", html);
+            else targetParent.insertAdjacentHTML("beforeend", html);
+        }
+
+        function renderEvaluationTriple(evaluation, tripleRefs) {
+            if (!evaluation || !tripleRefs) return;
+            const branchMetrics = evaluation.branch_metrics || {};
+            const branchScores = evaluation.branch_scores || {};
+            const recommended = evaluation.recommended_branch;
+            ["vector", "keyword", "hybrid"].forEach((b) => {
+                const ref = tripleRefs[b];
+                if (!ref || !ref.srcWrap) return;
+                const detail = branchMetrics[b];
+                if (!detail) return;
+                const score = branchScores[b];
+                const title = recommended === b ? "评估 · 推荐" : "评估";
+                const items = `
+                    ${buildEvalItems(detail.retrieval_quality || {}, ["hit@1", "precision@1", "recall@1", "hit@3"])}
+                    ${buildEvalItems(detail.answer_quality || {}, ["exact_match", "token_f1", "semantic_similarity"])}
+                    ${buildEvalItems(detail.relevance_faithfulness || {}, ["citation_coverage", "citation_consistency"])}
+                    ${buildEvalItems(detail.efficiency || {}, ["retrieval_elapsed_ms", "generation_elapsed_ms"], false)}
+                    ${
+                        score !== undefined
+                            ? `<div class="eval-item"><span class="label" title="${escapeHtml(evalLabelMeta("branch_score").full)}">${evalLabel("branch_score")}</span><span class="value">${fmtMetric(
+                                  score,
+                                  true
+                              )}</span></div>`
+                            : ""
+                    }
+                `;
+                const panelWrap = document.createElement("div");
+                panelWrap.innerHTML = makeEvalPanelHtml(title, items, `eval_${b}`);
+                const panel = panelWrap.firstElementChild;
+                if (panel) ref.srcWrap.insertBefore(panel, ref.srcWrap.firstChild);
+                if (ref.md) {
+                    const col = ref.md.closest(".answer-triple-col");
+                    if (col) col.classList.toggle("recommended", recommended === b);
+                }
+            });
+        }
+
+        function scheduleTripleRender() {
+            if (tripleRenderPending) return;
+            tripleRenderPending = true;
+            requestAnimationFrame(() => {
+                tripleRenderPending = false;
+                if (!tripleRefs) return;
+                ["vector", "keyword", "hybrid"].forEach((b) => {
+                    if (tripleRefs[b] && tripleRefs[b].md) {
+                        renderMarkdownToElement(tripleRefs[b].md, branchAnswers[b]);
+                    }
+                });
+                scrollToBottom();
+            });
+        }
+
+        function scheduleRender() {
+            //如果当前无待渲染的任务才会进行渲染
+            //这其实就是一个节流的函数
+            if (!pendingUpdate) {
+                pendingUpdate = true;
+                //在下一帧渲染
+                requestAnimationFrame(() => {
+                    renderMarkdownToElement(answerContent, fullAnswer);
+                    pendingUpdate = false;
+                    scrollToBottom();
+                });
+            }
+        }
+        document.getElementById("questionInput").value = "";
+        scrollToBottom();
+
+        try {
+            const url = currentKbId ? `/api/v1/knowledgebases/${currentKbId}/chat` : `/api/v1/chat`;
+            const pm = getPipelineModeSelect();
+            const selectedPipelineMode =
+                pm && ALLOWED_PIPELINE_MODES.has(pm.value)
+                    ? pm.value
+                    : PIPELINE_MODE_DEFAULT;
+            const body = {
+                question: question,
+                session_id: currentSessionId,
+                stream: true,
+            };
+            if (currentKbId) {
+                body.pipeline_mode = selectedPipelineMode;
+                const ctx = document.getElementById("ragContextInput").value.trim();
+                if (ctx) body.context = ctx;
+            }
+            const response = await fetch(url, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(body),
+            });
+            if (!response.ok) throw new Error("请求聊天失败");
+            const responseSessionId = response.headers.get("X-Session-Id");
+            if (responseSessionId) {
+                currentSessionId = responseSessionId;
+                if (currentKbId) {
+                    setSessionMode(responseSessionId, selectedPipelineMode);
+                }
+            }
+            //使用ReadableStream reader 获取response流
+            const reader = response.body.getReader();
+            // 使用TextDecoder解码服务器返回的二进制数据
+            const decoder = new TextDecoder();
+            //构建一个数据缓存区(字符串)
+            let buffer = "";
+            //重新加载会话列表以更新标题
+            await loadSessions();
+            while (true) {
+                //逐步读取一段数据
+                const { done, value } = await reader.read();
+                //如果读完了则结束循环
+                if (done) break;
+                //本块新数据解码为字符串，并追加加buffer
+                buffer += decoder.decode(value, { stream: true });
+                //按行切分，多行分别处理
+                const lines = buffer.split("\n");
+                //最后一行一般为数据残留，不处理，等下次处理
+                buffer = lines.pop() || "";
+                //处理每一行
+                for (const line of lines) {
+                    //如果这一行数据是以data: 开头的话，说明这是一个有效的SSE的数据包
+                    if (line.startsWith("data: ")) {
+                        //去除前缀，留下JSON内容
+                        const data = line.slice(6);
+                        //如果返回的是[DONE],仅跳过
+                        if (data == "[DONE]") continue;
+                        const chunk = JSON.parse(data);
+                        //如果类型为开始，为流的开始，要清空内容
+                        if (chunk.type == "start") {
+                            fullAnswer = "";
+                            if (chunk.metadata?.pipeline_mode === "triple_parallel") {
+                                tripleMode = true;
+                                branchAnswers.vector = "";
+                                branchAnswers.keyword = "";
+                                branchAnswers.hybrid = "";
+                                answerContent.className = "answer-triple-grid mt-2";
+                                answerContent.innerHTML = tripleGridHtml();
+                                tripleRefs = wireTripleRefs();
+                            } else {
+                                tripleMode = false;
+                                tripleRefs = null;
+                                answerContent.className = "markdown-content";
+                                answerContent.innerHTML = '<i class="bi bi-hourglass-split"></i> 思考中...';
+                            }
+                        } else if (chunk.type == "branch_start") {
+                            if (!tripleMode) {
+                                const labels = {
+                                    vector: "向量检索",
+                                    keyword: "关键词检索",
+                                    hybrid: "混合检索",
+                                };
+                                fullAnswer += `\n\n### ${labels[chunk.branch] || chunk.branch}\n\n`;
+                                scheduleRender();
+                            }
+                        } else if (chunk.type == "content") {
+                            if (tripleMode && chunk.branch) {
+                                branchAnswers[chunk.branch] = (branchAnswers[chunk.branch] || "") + chunk.content;
+                                scheduleTripleRender();
+                            } else {
+                                fullAnswer += chunk.content;
+                                scheduleRender();
+                            }
+                        } else if (chunk.type == "branch_done") {
+                            if (tripleRefs && tripleRefs[chunk.branch]) {
+                                const citedAnswer = chunk.metadata?.answer_with_citations;
+                                if (citedAnswer) {
+                                    branchAnswers[chunk.branch] = citedAnswer;
+                                    renderMarkdownToElement(
+                                        tripleRefs[chunk.branch].md,
+                                        citedAnswer
+                                    );
+                                }
+                                updateTripleMeta(chunk.branch, chunk.metadata || {});
+                                renderSources(
+                                    chunk.sources,
+                                    chunk.metadata,
+                                    tripleRefs[chunk.branch].srcWrap,
+                                    currentKbId
+                                );
+                            } else {
+                                renderSources(chunk.sources, chunk.metadata, answerDiv, currentKbId);
+                            }
+                        } else if (chunk.type == "done") {
+                            if (chunk.metadata?.pipeline_mode === "triple_parallel") {
+                                ["vector", "keyword", "hybrid"].forEach((b) => {
+                                    const finalBranchAnswer = chunk.metadata?.triple?.[b]?.answer;
+                                    if (finalBranchAnswer) {
+                                        branchAnswers[b] = finalBranchAnswer;
+                                    }
+                                    if (tripleRefs && tripleRefs[b] && tripleRefs[b].md) {
+                                        renderMarkdownToElement(tripleRefs[b].md, branchAnswers[b]);
+                                    }
+                                    const meta = chunk.metadata?.triple?.[b];
+                                    if (meta) updateTripleMeta(b, meta);
+                                });
+                                renderEvaluationTriple(chunk.metadata?.evaluation, tripleRefs);
+                            } else if (chunk.metadata?.pipeline_mode === "retrieve_only" && !fullAnswer) {
+                                answerContent.innerHTML =
+                                    '<p class="text-muted small mb-0"><i class="bi bi-search"></i> 仅检索模式：未调用大模型。</p>';
+                            } else {
+                                const finalAnswer = chunk.metadata?.answer_with_citations || fullAnswer;
+                                fullAnswer = finalAnswer;
+                                renderMarkdownToElement(answerContent, fullAnswer);
+                            }
+                            if (chunk.metadata?.pipeline_mode !== "triple_parallel") {
+                                renderEvaluationSingle(chunk.metadata?.evaluation, answerDiv);
+                                renderSources(chunk.sources, chunk.metadata, answerDiv, currentKbId);
+                            }
+                        } else if (chunk.type == "error") {
+                            answerContent.innerHTML = `<div class="alert alert-danger">${chunk.content}</div>`;
+                        }
+                    }
+                }
+            }
+        } catch (error) {
+            answerContent.innerHTML = `<div class="alert alert-danger"><strong>错误:</strong> ${error.message}</div>`;
+        }
+        scrollToBottom();
+    }
+    function renderSources(sources, metadata, targetParent, currentKbId) {
+        const html = generateSourcesHTML(sources, metadata, currentKbId);
+        if (html) {
+            const tempDiv = document.createElement("div");
+            tempDiv.innerHTML = html;
+            while (tempDiv.firstChild) {
+                targetParent.appendChild(tempDiv.firstChild);
+            }
+        }
+    }
+    function generateSourcesHTML(sources, metadata, currentKbId) {
+        const sourcesHTML =
+            sources
+                ?.map((source, idx) => {
+                    const scores = [];
+                    const retrieval_type = source.retrieval_type || "";
+                    const rerank_score = source.rerank_score;
+                    const vector_score = source.vector_score;
+                    const keyword_score = source.keyword_score;
+                    const rrf_score = source.rrf_score;
+                    const chunk_id = source.chunk_id;
+                    const doc_id = source.doc_id;
+                    const doc_name = source.doc_name;
+                    const content = source.content;
+                    //判断是否是向量检索
+                    const isVector = retrieval_type.includes("vector");
+                    //判断是否是关键字检索
+                    const isKeyword = retrieval_type.includes("keyword");
+                    //判断是否是混合检索
+                    const isHybrid = retrieval_type.includes("hybrid");
+
+                    const hasNumber = (v) => typeof v === "number" && Number.isFinite(v);
+                    const scoreText = (v) => hasNumber(v) ? v : "N/A";
+
+                    if (isHybrid) {
+                        scores.push(`<span  class="badge bg-info me-1">向量分数:${scoreText(vector_score)}</span>`);
+                        scores.push(`<span class="badge bg-success me-1">关键字分数:${scoreText(keyword_score)}</span>`);
+                        scores.push(`<span class="badge bg-primary me-1">融合分数:${scoreText(rrf_score)}</span>`);
+                    } else if (isVector) {
+                        scores.push(`<span class="badge bg-info me-1" >向量分数:${scoreText(vector_score)}</span>`);
+                    } else if (isKeyword) {
+                        scores.push(`<span class="badge bg-success me-1">关键字分数:${scoreText(keyword_score)}</span>`);
+                    }
+                    if (rerank_score !== null && rerank_score !== undefined) {
+                        scores.push(`<span class="badge bg-danger me-1">重排序分数:${scoreText(rerank_score)}</span>`);
+                    } else {
+                        scores.push('<span class="badge bg-secondary me-1">重排序分数:N/A</span>');
+                    }
+                    // 返回单个引用块的 html 字符串
+                    return `
+                <div class="source-item chat-source-item mb-2 p-2 border rounded" data-citation-index="${idx + 1}">
+                    <div class="fw-bold mb-1">
+                        <i class="bi bi-file-earmark"></i> ${idx + 1}. ${doc_name || "未知文档"}
+                    </div>
+                    <div class="mb-2">
+                        ${scores?.length > 0 ? scores.join("") : '<span class="text-muted small">暂无分数信息</span>'}
+                    </div>
+                    <div class="small text-muted">
+                        <strong>分块内容：</strong>
+                        <div class="mt-1 p-2 bg-white rounded" style="max-height: 150px; overflow-y: auto; font-size: 0.9em;">
+                            ${escapeHtml(content || "")}
+                        </div>
+                    </div>
+                </div>
+            `;
+                })
+                .join("") ?? "未检索到来源文档";
+        // 返回所有引用来源的 html 块
+        if (!sourcesHTML) return "";
+        const sourceBlockId = `src_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+        return `
+            <div class="chat-sources-block mt-2 p-2 rounded border bg-light">
+                <div class="chat-sources-header fw-semibold small text-secondary">
+                    <span><i class="bi bi-link-45deg"></i> 引用来源 (${sources?.length ?? 0})</span>
+                    <button type="button" class="chat-sources-toggle" data-source-toggle="${sourceBlockId}" aria-expanded="false">
+                        展开
+                    </button>
+                </div>
+                <div class="chat-sources-body" id="${sourceBlockId}">
+                    ${sourcesHTML}
+                </div>
+            </div>
+        `;
+    }
+    function applySidebarCollapsed(collapsed) {
+        const sidebar = document.getElementById("chatSidebar");
+        const btn = document.getElementById("sidebarToggleBtn");
+        if (!sidebar || !btn) return;
+        sidebar.classList.toggle("chat-sidebar--collapsed", collapsed);
+        btn.setAttribute("aria-expanded", collapsed ? "false" : "true");
+        btn.title = collapsed ? "展开侧边栏" : "收起侧边栏";
+        const icon = btn.querySelector("i");
+        if (icon) icon.className = collapsed ? "bi bi-chevron-double-right" : "bi bi-chevron-double-left";
+    }
+
+    function autoCollapseByViewport(force = false) {
+        const keyManual = "chat_sidebar_manual";
+        if (!force && localStorage.getItem(keyManual) === "1") return;
+        const shouldCollapse = window.innerWidth < 1560;
+        applySidebarCollapsed(shouldCollapse);
+        localStorage.setItem("chat_sidebar_collapsed", shouldCollapse ? "1" : "0");
+    }
+
+    function initSidebarToggle() {
+        const sidebar = document.getElementById("chatSidebar");
+        const btn = document.getElementById("sidebarToggleBtn");
+        if (!sidebar || !btn) return;
+        const key = "chat_sidebar_collapsed";
+        const keyManual = "chat_sidebar_manual";
+        if (localStorage.getItem(key) === null) {
+            // 首次进入时优先给聊天区更大面积
+            autoCollapseByViewport(true);
+        } else {
+            applySidebarCollapsed(localStorage.getItem(key) === "1");
+        }
+        window.addEventListener("resize", () => autoCollapseByViewport(false));
+        btn.addEventListener("click", function () {
+            const collapsed = !sidebar.classList.contains("chat-sidebar--collapsed");
+            applySidebarCollapsed(collapsed);
+            localStorage.setItem(key, collapsed ? "1" : "0");
+            localStorage.setItem(keyManual, "1");
+        });
+    }
+
+    function expandSourceContainerIfNeeded(item) {
+        const sourcesBody = item.closest(".chat-sources-body");
+        if (!sourcesBody) return;
+        const isHidden = sourcesBody.style.display === "none" || !sourcesBody.style.display;
+        if (!isHidden) return;
+        sourcesBody.style.display = "block";
+        const toggle = sourcesBody.parentElement?.querySelector(
+            `[data-source-toggle="${sourcesBody.id}"]`
+        );
+        if (toggle) {
+            toggle.setAttribute("aria-expanded", "true");
+            toggle.textContent = "收起";
+        }
+    }
+
+    function focusCitationSource(refEl) {
+        const idx = refEl?.getAttribute("data-citation-index");
+        if (!idx) return;
+        const branchScope = refEl.closest(".answer-triple-col");
+        const answerScope = refEl.closest(".chat-answer-body");
+        let sourceItem = null;
+        if (branchScope) {
+            sourceItem = branchScope.querySelector(`.chat-source-item[data-citation-index="${idx}"]`);
+        }
+        if (!sourceItem && answerScope) {
+            sourceItem = answerScope.querySelector(`.chat-source-item[data-citation-index="${idx}"]`);
+        }
+        if (!sourceItem) return;
+        expandSourceContainerIfNeeded(sourceItem);
+        sourceItem.classList.add("chat-source-item--highlight");
+        sourceItem.scrollIntoView({ behavior: "smooth", block: "center" });
+        setTimeout(() => sourceItem.classList.remove("chat-source-item--highlight"), 1500);
+    }
+
+    document.addEventListener("click", function (event) {
+        const citationRef = event.target.closest(".inline-citation-ref");
+        if (citationRef) {
+            focusCitationSource(citationRef);
+            return;
+        }
+        const evalBtn = event.target.closest("[data-eval-toggle]");
+        if (evalBtn) {
+            const targetId = evalBtn.getAttribute("data-eval-toggle");
+            const body = document.getElementById(targetId);
+            if (!body) return;
+            const expanded = evalBtn.getAttribute("aria-expanded") === "true";
+            if (expanded) {
+                body.style.display = "none";
+                evalBtn.setAttribute("aria-expanded", "false");
+                evalBtn.textContent = "展开";
+            } else {
+                body.style.display = "block";
+                evalBtn.setAttribute("aria-expanded", "true");
+                evalBtn.textContent = "收起";
+            }
+            return;
+        }
+        const toggleBtn = event.target.closest("[data-source-toggle]");
+        if (!toggleBtn) return;
+        const targetId = toggleBtn.getAttribute("data-source-toggle");
+        const body = document.getElementById(targetId);
+        if (!body) return;
+        const expanded = toggleBtn.getAttribute("aria-expanded") === "true";
+        if (expanded) {
+            body.style.display = "none";
+            toggleBtn.setAttribute("aria-expanded", "false");
+            toggleBtn.textContent = "展开";
+        } else {
+            body.style.display = "block";
+            toggleBtn.setAttribute("aria-expanded", "true");
+            toggleBtn.textContent = "收起";
+        }
+    });
+
+    document.addEventListener("DOMContentLoaded", function () {
+        initSidebarToggle();
+        loadSessionModeCache();
+        loadSessions();
+        updatePipelineUi();
+        if (typeof marked !== "undefined") {
+            // 配置 marked.js 的渲染选项
+            marked.setOptions({
+                // 启用软换行
+                breaks: true,
+                // 启用 Github Flavored Markdown
+                gfm: true,
+                // 禁用标题自动生成 id
+                headerIds: false,
+                // 禁用混淆处理
+                mangle: false,
+            });
+        }
+    });
+    function updatePipelineUi() {
+        const pm = document.getElementById("pipelineModeSelect");
+        const ctxWrap = document.getElementById("ragContextWrap");
+        const ptg = document.getElementById("pipelineToolbarGroup");
+        if (!pm || !ctxWrap) return;
+        const hasKb = !!document.getElementById("kbSelect").value;
+        pm.disabled = !hasKb;
+        pm.style.display = hasKb ? "inline-block" : "none";
+        if (ptg) ptg.style.display = hasKb ? "flex" : "none";
+        if (!ALLOWED_PIPELINE_MODES.has(pm.value)) {
+            pm.value = PIPELINE_MODE_DEFAULT;
+        }
+        if (!hasKb) {
+            pm.value = PIPELINE_MODE_DEFAULT;
+        }
+        if (hasKb && currentSessionId) {
+            setSessionMode(currentSessionId, pm.value);
+        }
+        ctxWrap.style.display = "none";
+    }
+    async function onKbChange() {
+        currentKbId = document.getElementById("kbSelect").value;
+        if (currentSessionId) {
+            // 切换知识库时重置当前会话，避免不同知识库串在同一会话
+            currentSessionId = null;
+            clearChatMessages();
+        }
+        const pm = getPipelineModeSelect();
+        if (pm) pm.value = PIPELINE_MODE_DEFAULT;
+        document.getElementById("submitBtn").disabled = false;
+        updatePipelineUi();
+    }
+</script>
+{% endblock %}

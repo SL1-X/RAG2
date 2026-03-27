@@ -1,0 +1,171 @@
+{% extends "base.html" %}
+
+{% block title %}注册 - 智能问答系统{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* 注册页面样式 */
+    .auth-container {
+        min-height: 80vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background-color: var(--bs-secondary-bg);
+        border-radius: 12px;
+        padding: 2rem;
+        margin: 2rem 0;
+    }
+    
+    .auth-card {
+        width: 100%;
+        max-width: 450px;
+        border-radius: 16px;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+        overflow: hidden;
+        border: none;
+        transition: all 0.3s ease;
+    }
+    
+    .auth-card:hover {
+        box-shadow: 0 15px 50px rgba(0, 0, 0, 0.2);
+        transform: translateY(-5px);
+    }
+    
+    .auth-header {
+        background: linear-gradient(135deg, var(--bs-success), var(--bs-success-dark, #198754));
+        color: white;
+        padding: 2rem;
+        text-align: center;
+    }
+    
+    .auth-header h4 {
+        margin: 0;
+        font-weight: 600;
+        font-size: 1.5rem;
+    }
+    
+    .auth-body {
+        padding: 2rem;
+    }
+    
+    .form-control {
+        border-radius: 8px;
+        border: 1px solid var(--bs-border-color);
+        transition: all 0.2s ease;
+        padding: 0.75rem 1rem;
+        font-size: 1rem;
+    }
+    
+    .form-control:focus {
+        border-color: var(--bs-success);
+        box-shadow: 0 0 0 0.25rem rgba(var(--bs-success-rgb), 0.25);
+        outline: none;
+    }
+    
+    .btn-success {
+        border-radius: 8px;
+        padding: 0.75rem;
+        font-size: 1rem;
+        font-weight: 500;
+        transition: all 0.2s ease;
+        border: none;
+        background: linear-gradient(135deg, var(--bs-success), var(--bs-success-dark, #198754));
+    }
+    
+    .btn-success:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(var(--bs-success-rgb), 0.3);
+    }
+    
+    .auth-footer {
+        padding: 1.5rem 2rem;
+        background-color: var(--bs-secondary-bg);
+        border-top: 1px solid var(--bs-border-color);
+        text-align: center;
+    }
+    
+    .auth-footer a {
+        color: var(--bs-success);
+        text-decoration: none;
+        transition: color 0.2s ease;
+        font-weight: 500;
+    }
+    
+    .auth-footer a:hover {
+        color: var(--bs-success-dark, #198754);
+        text-decoration: underline;
+    }
+    
+    /* 响应式调整 */
+    @media (max-width: 768px) {
+        .auth-container {
+            padding: 1rem;
+            margin: 1rem 0;
+        }
+        
+        .auth-card {
+            max-width: 100%;
+        }
+        
+        .auth-header,
+        .auth-body,
+        .auth-footer {
+            padding: 1.5rem;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="auth-container">
+    <div class="auth-card">
+        <div class="auth-header">
+            <h4>
+                <i class="bi bi-person-plus me-2"></i>
+                用户注册
+            </h4>
+        </div>
+        <div class="auth-body">
+            <form method="POST" action="{{ url_for('auth.register') }}">
+                <div class="mb-4">
+                    <label for="username" class="form-label">用户名 <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" id="username" name="username" 
+                           placeholder="至少3个字符" required autofocus minlength="3">
+                    <div class="form-text">用户名将用于登录，至少需要3个字符</div>
+                </div>
+
+                <div class="mb-4">
+                    <label for="email" class="form-label">邮箱</label>
+                    <input type="email" class="form-control" id="email" name="email" 
+                           placeholder="example@email.com">
+                    <div class="form-text">邮箱为可选，用于找回密码等</div>
+                </div>
+
+                <div class="mb-4">
+                    <label for="password" class="form-label">密码 <span class="text-danger">*</span></label>
+                    <input type="password" class="form-control" id="password" name="password" 
+                           placeholder="至少6个字符" required minlength="6">
+                    <div class="form-text">密码至少需要6个字符</div>
+                </div>
+
+                <div class="mb-4">
+                    <label for="password_confirm" class="form-label">确认密码 <span class="text-danger">*</span></label>
+                    <input type="password" class="form-control" id="password_confirm" name="password_confirm" 
+                           placeholder="请再次输入密码" required minlength="6">
+                </div>
+
+                <div class="d-grid gap-2">
+                    <button type="submit" class="btn btn-success">
+                        <i class="bi bi-person-plus me-2"></i>
+                        注册
+                    </button>
+                </div>
+            </form>
+        </div>
+        <div class="auth-footer">
+            <p class="mb-0">已有账号？ <a href="{{ url_for('auth.login') }}">立即登录</a></p>
+        </div>
+    </div>
+</div>
+{% endblock %}
+

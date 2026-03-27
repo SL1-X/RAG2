@@ -1,0 +1,618 @@
+{% extends "base.html" %}
+
+{% block title %}{{ kb.name }} - 智能问答系统{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* 文档管理页面样式 */
+    .doc-card {
+        border-radius: 12px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        transition: all 0.3s ease;
+        border: 1px solid var(--bs-border-color-translucent);
+    }
+    
+    .doc-card:hover {
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+        transform: translateY(-2px);
+    }
+    
+    .doc-table {
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    }
+    
+    .doc-table thead {
+        background-color: var(--bs-primary-bg-subtle);
+        border-bottom: 2px solid var(--bs-primary-border-subtle);
+    }
+    
+    .doc-table th {
+        font-weight: 600;
+        color: var(--bs-primary);
+        text-transform: uppercase;
+        font-size: 0.875rem;
+        letter-spacing: 0.05em;
+    }
+    
+    .doc-table tbody tr {
+        transition: all 0.2s ease;
+        border-bottom: 1px solid var(--bs-border-color);
+    }
+    
+    .doc-table tbody tr:hover {
+        background-color: var(--bs-secondary-bg);
+        transform: translateX(4px);
+    }
+    
+    .doc-table tbody tr:last-child {
+        border-bottom: none;
+    }
+    
+    .badge-status {
+        padding: 0.5em 1em;
+        border-radius: 20px;
+        font-weight: 500;
+        font-size: 0.875rem;
+        transition: all 0.2s ease;
+    }
+    
+    .btn-action {
+        transition: all 0.2s ease;
+        border-radius: 6px;
+        font-size: 0.875rem;
+        padding: 0.25rem 0.75rem;
+    }
+    
+    .btn-action:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    }
+    .nav-card {
+        border-radius: 12px;
+        border: 1px solid var(--bs-border-color-translucent);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+        margin-bottom: 1rem;
+    }
+    .nav-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.8rem;
+    }
+    .nav-block {
+        border: 1px solid var(--bs-border-color);
+        border-radius: 10px;
+        background: var(--bs-light-bg-subtle, #f8f9fa);
+        padding: 0.7rem 0.8rem;
+    }
+    .nav-block h6 {
+        margin-bottom: 0.55rem;
+        font-size: 0.92rem;
+        font-weight: 700;
+    }
+    .nav-list {
+        margin: 0;
+        padding-left: 1.1rem;
+        font-size: 0.9rem;
+    }
+    .nav-list li {
+        margin-bottom: 0.3rem;
+    }
+    .nav-meta {
+        font-size: 0.78rem;
+        color: var(--bs-secondary-color);
+    }
+    .nav-loading {
+        font-size: 0.9rem;
+        color: var(--bs-secondary-color);
+    }
+    
+    .modal-content {
+        border-radius: 16px;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+        border: none;
+    }
+    
+    .modal-header {
+        background-color: var(--bs-primary-bg-subtle);
+        border-bottom: 1px solid var(--bs-primary-border-subtle);
+        border-radius: 16px 16px 0 0;
+    }
+    
+    .modal-title {
+        font-weight: 600;
+        color: var(--bs-primary);
+    }
+    
+    .form-control {
+        border-radius: 8px;
+        border: 1px solid var(--bs-border-color);
+        transition: all 0.2s ease;
+    }
+    
+    .form-control:focus {
+        border-color: var(--bs-primary);
+        box-shadow: 0 0 0 0.25rem rgba(var(--bs-primary-rgb), 0.25);
+        outline: none;
+    }
+    
+    .progress {
+        border-radius: 8px;
+        overflow: hidden;
+        height: 8px;
+    }
+    
+    .progress-bar {
+        border-radius: 8px;
+    }
+    
+    /* 空状态样式 */
+    .empty-state {
+        text-align: center;
+        padding: 4rem 2rem;
+        background-color: var(--bs-secondary-bg);
+        border-radius: 12px;
+        margin: 2rem 0;
+    }
+    
+    .empty-state-icon {
+        font-size: 4rem;
+        color: var(--bs-secondary-color);
+        margin-bottom: 1rem;
+        opacity: 0.5;
+    }
+    
+    .empty-state-text {
+        color: var(--bs-secondary-color);
+        font-size: 1.125rem;
+    }
+    
+    /* 面包屑导航样式 */
+    .breadcrumb {
+        background-color: transparent;
+        padding: 0;
+        margin-bottom: 1.5rem;
+    }
+    
+    .breadcrumb-item a {
+        color: var(--bs-secondary-color);
+        text-decoration: none;
+        transition: color 0.2s ease;
+    }
+    
+    .breadcrumb-item a:hover {
+        color: var(--bs-primary);
+    }
+    
+    .breadcrumb-item.active {
+        color: var(--bs-primary);
+        font-weight: 500;
+    }
+    
+    /* 响应式调整 */
+    @media (max-width: 768px) {
+        .nav-grid {
+            grid-template-columns: 1fr;
+        }
+        .doc-table {
+            font-size: 0.875rem;
+        }
+        
+        .btn-action {
+            font-size: 0.75rem;
+            padding: 0.25rem 0.5rem;
+            margin-right: 0.25rem !important;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- 面包屑导航 -->
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="/">首页</a></li>
+            <li class="breadcrumb-item"><a href="/kb">知识库</a></li>
+            <li class="breadcrumb-item active">{{ kb.name }}</li>
+        </ol>
+    </nav>
+
+    <div class="nav-card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">
+                <i class="bi bi-signpost-split me-2"></i>
+                文档级导航
+            </h5>
+            <button id="refreshNavBtn" class="btn btn-outline-primary btn-sm" onclick="loadNavigation(true)">
+                <i class="bi bi-arrow-clockwise me-1"></i>刷新导航
+            </button>
+        </div>
+        <div class="card-body">
+            <div class="nav-meta mb-2" id="navStats"></div>
+            <div id="navLoading" class="nav-loading">
+                <i class="bi bi-hourglass-split me-1"></i> 正在生成目录、时间线、主题聚类和关键问题建议...
+            </div>
+            <div id="navError" class="alert alert-warning d-none mb-2"></div>
+            <div id="navGrid" class="nav-grid d-none">
+                <section class="nav-block">
+                    <h6><i class="bi bi-list-nested me-1"></i> 自动目录</h6>
+                    <div id="navToc"></div>
+                </section>
+                <section class="nav-block">
+                    <h6><i class="bi bi-calendar-event me-1"></i> 时间线</h6>
+                    <div id="navTimeline"></div>
+                </section>
+                <section class="nav-block">
+                    <h6><i class="bi bi-diagram-3 me-1"></i> 主题聚类</h6>
+                    <div id="navThemes"></div>
+                </section>
+                <section class="nav-block">
+                    <h6><i class="bi bi-patch-question me-1"></i> 关键问题建议</h6>
+                    <div id="navQuestions"></div>
+                </section>
+            </div>
+        </div>
+    </div>
+
+    <!-- 文档管理卡片 -->
+    <div class="doc-card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">
+                <i class="bi bi-file-earmark me-2"></i>
+                文档管理
+            </h5>
+            <button class="btn btn-primary btn-sm d-flex align-items-center gap-1" data-bs-toggle="modal" data-bs-target="#uploadModal">
+                <i class="bi bi-upload"></i>
+                <span>上传文档</span>
+            </button>
+        </div>
+        <div class="card-body">
+            <div id="docList">
+                {% if documents %}
+                <div class="table-responsive">
+                    <table class="table table-hover doc-table">
+                        <thead>
+                            <tr>
+                                <th>文档名称</th>
+                                <th>状态</th>
+                                <th>块数</th>
+                                <th>文件大小</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for doc in documents %}
+                            <tr>
+                                <td>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <i class="bi bi-file-earmark-{{ 'pdf' if doc.file_type == 'pdf' else 'word' if doc.file_type == 'docx' else 'text' }}" style="font-size: 1.25rem;"></i>
+                                        <span class="font-medium">{{ doc.name }}</span>
+                                    </div>
+                                </td>
+                                <td>
+                                    {% set status_map = {
+                                    'completed': '已完成',
+                                    'processing': '处理中',
+                                    'failed': '失败',
+                                    'pending': '待处理'
+                                    } %}
+                                    <span class="badge badge-status bg-{{ 'success' if doc.status == 'completed' else 'warning' if doc.status == 'processing' else 'danger' if doc.status == 'failed' else 'secondary' }}">
+                                        {{ status_map.get(doc.status, doc.status) }}
+                                    </span>
+                                </td>
+                                <td>{{ doc.chunk_count or 0 }}</td>
+                                <td>{{ "%.2f"|format(doc.file_size / 1024) }} KB</td>
+                                <td>
+                                    <div class="d-flex gap-1">
+                                        {% if doc.status == 'completed' %}
+                                        <a href="/documents/{{ doc.id }}/chunks" class="btn btn-action btn-info" aria-label="查看分块">
+                                            <i class="bi bi-list-ul me-1"></i>
+                                            <span>查看分块</span>
+                                        </a>
+                                        {% endif %}
+                                        {% if doc.status == 'pending' %}
+                                        <button class="btn btn-action btn-primary" onclick="processDoc('{{ doc.id }}', '{{ doc.name }}')" aria-label="处理">
+                                            <i class="bi bi-play-circle me-1"></i>
+                                            <span>处理</span>
+                                        </button>
+                                        {% elif doc.status in ['completed', 'failed'] %}
+                                        <button class="btn btn-action btn-warning" onclick="processDoc('{{ doc.id }}', '{{ doc.name }}')" aria-label="重新处理">
+                                            <i class="bi bi-arrow-clockwise me-1"></i>
+                                            <span>重新处理</span>
+                                        </button>
+                                        {% elif doc.status == 'processing' %}
+                                        <button class="btn btn-action btn-secondary" disabled aria-label="处理中">
+                                            <i class="bi bi-hourglass-split me-1"></i>
+                                            <span>处理中</span>
+                                        </button>
+                                        {% endif %}
+                                        <button class="btn btn-action btn-danger" onclick="deleteDoc('{{ doc.id }}', '{{ doc.name }}')" aria-label="删除">
+                                            <i class="bi bi-trash me-1"></i>
+                                            <span>删除</span>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- 分页控件 -->
+                {% if pagination and pagination.total > pagination.page_size %}
+                <nav aria-label="文档列表分页" class="mt-4">
+                    <ul class="pagination justify-content-center">
+                        {% set current_page = pagination.page %}
+                        {% set total_pages = (pagination.total + pagination.page_size - 1) // pagination.page_size %}
+
+                        <!-- 上一页 -->
+                        <li class="page-item {% if current_page <= 1 %}disabled{% endif %}">
+                            <a class="page-link" href="?page={{ current_page - 1 }}&page_size={{ pagination.page_size }}" {% if current_page <= 1 %}tabindex="-1" aria-disabled="true"{% endif %}>
+                                <i class="bi bi-chevron-left"></i>
+                                <span class="ms-1">上一页</span>
+                            </a>
+                        </li>
+
+                        <!-- 页码 -->
+                        {% set start_page = [1, current_page - 2] | max %}
+                        {% set end_page = [total_pages, current_page + 2] | min %}
+
+                        {% if start_page > 1 %}
+                        <li class="page-item">
+                            <a class="page-link" href="?page=1&page_size={{ pagination.page_size }}">1</a>
+                        </li>
+                        {% if start_page > 2 %}
+                        <li class="page-item disabled">
+                            <span class="page-link">...</span>
+                        </li>
+                        {% endif %}
+                        {% endif %}
+
+                        {% for page_num in range(start_page, end_page + 1) %}
+                        <li class="page-item {% if page_num == current_page %}active{% endif %}">
+                            <a class="page-link" href="?page={{ page_num }}&page_size={{ pagination.page_size }}">
+                                {{ page_num }}
+                            </a>
+                        </li>
+                        {% endfor %}
+
+                        {% if end_page < total_pages %}
+                        {% if end_page < total_pages - 1 %}
+                        <li class="page-item disabled">
+                            <span class="page-link">...</span>
+                        </li>
+                        {% endif %}
+                        <li class="page-item">
+                            <a class="page-link" href="?page={{ total_pages }}&page_size={{ pagination.page_size }}">{{ total_pages }}</a>
+                        </li>
+                        {% endif %}
+
+                        <!-- 下一页 -->
+                        <li class="page-item {% if current_page >= total_pages %}disabled{% endif %}">
+                            <a class="page-link" href="?page={{ current_page + 1 }}&page_size={{ pagination.page_size }}" {% if current_page >= total_pages %}tabindex="-1" aria-disabled="true"{% endif %}>
+                                <span class="me-1">下一页</span>
+                                <i class="bi bi-chevron-right"></i>
+                            </a>
+                        </li>
+                    </ul>
+                    <div class="text-center text-muted small mt-2">
+                        共 {{ pagination.total }} 个文档，第 {{ current_page }} / {{ total_pages }} 页
+                    </div>
+                </nav>
+                {% endif %}
+                {% else %}
+                <div class="empty-state">
+                    <div class="empty-state-icon">
+                        <i class="bi bi-inbox"></i>
+                    </div>
+                    <p class="empty-state-text">还没有文档，点击上方按钮上传文档</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 上传文档模态框 -->
+<div class="modal fade" id="uploadModal" tabindex="-1" aria-labelledby="uploadModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="uploadModalLabel">上传文档</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+            </div>
+            <form id="uploadForm" onsubmit="uploadDocument(event)" enctype="multipart/form-data">
+                <div class="modal-body">
+                    <div class="mb-4">
+                        <label for="fileInput" class="form-label">选择文件</label>
+                        <input type="file" class="form-control" id="fileInput" name="file" accept=".pdf,.docx,.txt,.md" required>
+                        <div class="form-text">支持 PDF、DOCX、TXT、MD 格式</div>
+                    </div>
+                    <div class="mb-4">
+                        <label for="nameInput" class="form-label">文档名称（可选）</label>
+                        <input type="text" class="form-control" id="nameInput" name="name" placeholder="留空使用文件名">
+                    </div>
+                    <div id="uploadProgress" class="progress d-none">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 100%"></div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="submit" class="btn btn-primary">上传</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    const kbId = '{{kb.id}}'
+    function esc(text) {
+        const div = document.createElement("div");
+        div.textContent = text ?? "";
+        return div.innerHTML;
+    }
+    function renderSimpleList(items, emptyText) {
+        if (!items || !items.length) {
+            return `<p class="text-muted small mb-0">${esc(emptyText)}</p>`;
+        }
+        return `<ul class="nav-list">${items.map((x) => `<li>${x}</li>`).join("")}</ul>`;
+    }
+    function renderToc(toc) {
+        if (!toc || !toc.length) {
+            return `<p class="text-muted small mb-0">暂无目录结果</p>`;
+        }
+        return toc
+            .map((doc) => {
+                const headings = (doc.headings || []).slice(0, 5).map((h) => esc(h));
+                return `
+                <div class="mb-2">
+                    <div class="fw-semibold small">${esc(doc.doc_name || "未知文档")}</div>
+                    ${renderSimpleList(headings, "未识别到章节标题")}
+                </div>
+                `;
+            })
+            .join("");
+    }
+    function renderTimeline(timeline) {
+        if (!timeline || !timeline.length) {
+            return `<p class="text-muted small mb-0">暂无时间线事件</p>`;
+        }
+        const items = timeline.slice(0, 12).map((item) => {
+            return `<strong>${esc(item.date_display || item.date)}</strong> · ${esc(item.summary || "")}
+                <div class="nav-meta">${esc(item.doc_name || "")}</div>`;
+        });
+        return renderSimpleList(items, "暂无时间线事件");
+    }
+    function renderThemes(themes) {
+        if (!themes || !themes.length) {
+            return `<p class="text-muted small mb-0">暂无可用主题</p>`;
+        }
+        return themes
+            .slice(0, 6)
+            .map((theme) => {
+                const kw = (theme.keywords || []).slice(0, 4).map((k) => esc(k)).join(" / ");
+                const snippet = (theme.snippets || [])[0];
+                return `
+                <div class="mb-2">
+                    <div class="fw-semibold small">${esc(theme.title || "主题")}</div>
+                    <div class="nav-meta mb-1">${kw}</div>
+                    <div class="small">${esc(snippet?.text || "")}</div>
+                </div>
+                `;
+            })
+            .join("");
+    }
+    function renderQuestions(questions) {
+        const items = (questions || []).slice(0, 10).map((q) => esc(q));
+        return renderSimpleList(items, "暂无建议问题");
+    }
+    async function loadNavigation(forceRefresh = false) {
+        const loadingEl = document.getElementById("navLoading");
+        const errorEl = document.getElementById("navError");
+        const gridEl = document.getElementById("navGrid");
+        const statsEl = document.getElementById("navStats");
+        const btn = document.getElementById("refreshNavBtn");
+        if (!loadingEl || !errorEl || !gridEl || !statsEl) return;
+        if (btn) btn.disabled = true;
+        loadingEl.classList.remove("d-none");
+        errorEl.classList.add("d-none");
+        gridEl.classList.add("d-none");
+        try {
+            const url = `/api/v1/knowledgebases/${kbId}/navigation${forceRefresh ? `?t=${Date.now()}` : ""}`;
+            const response = await fetch(url);
+            const result = await response.json();
+            if (!response.ok || result.code !== 200) {
+                throw new Error(result.message || "加载导航失败");
+            }
+            const data = result.data || {};
+            document.getElementById("navToc").innerHTML = renderToc(data.toc || []);
+            document.getElementById("navTimeline").innerHTML = renderTimeline(data.timeline || []);
+            document.getElementById("navThemes").innerHTML = renderThemes(data.themes || []);
+            document.getElementById("navQuestions").innerHTML = renderQuestions(
+                data.suggested_questions || []
+            );
+            const stats = data.stats || {};
+            statsEl.textContent = `覆盖 ${Number(stats.docs || 0)} 个文档 / ${Number(
+                stats.chunks || 0
+            )} 个分块`;
+            gridEl.classList.remove("d-none");
+        } catch (error) {
+            errorEl.textContent = error.message || "加载导航失败";
+            errorEl.classList.remove("d-none");
+            statsEl.textContent = "";
+        } finally {
+            loadingEl.classList.add("d-none");
+            if (btn) btn.disabled = false;
+        }
+    }
+    async function uploadDocument(event) {
+        event.preventDefault()
+        const form = event.target;
+        const formData = new FormData(form)
+        const processDiv = document.getElementById("uploadProgress")
+        const submitBtn = form.querySelector('button[type="submit"]')
+        processDiv.classList.remove('d-none')
+        submitBtn.disabled = true
+        try {
+            const response = await fetch(`/api/v1/knowledgebases/${kbId}/documents`, {
+                method: 'POST',
+                body: formData
+            })
+            if (response.ok) {
+                const result = await response.json()
+                const docId = result.data.id
+                bootstrap.Modal.getInstance(document.getElementById("uploadModal")).hide()
+                form.reset()
+                location.reload()
+            } else {
+                const error = await response.json()
+                alert("上传失败:" + error.message)
+            }
+        } catch (error) {
+            alert("上传失败:" + error.message)
+        } finally {
+            processDiv.classList.add('d-none')
+            submitBtn.disabled = false
+        }
+    }
+    async function processDoc(docId,docName){
+        try{
+            const response = await fetch(`/api/v1/documents/${docId}/process`,{method:"POST"})
+            if (response.ok){
+                alert("文件处理处理已经提交，请稍后刷新页面查看处理状态")
+                setTimeout(()=>location.reload(),1000)
+            }else{
+                const error = await response.json()
+                alert("处理失败:"+error.message)
+            }
+        }catch(error){
+            alert("处理失败"+error.message)
+        }
+    }
+    async function deleteDoc(docId,docName){
+        if (!confirm(`确定要删除文档${docName}吗？此操作不可恢复`)){
+            return 
+        }
+          try{
+            const response = await fetch(`/api/v1/documents/${docId}`,{method:"DELETE"})
+            if (response.ok){
+                alert("文档删除成功")
+                location.reload()
+            }else{
+                const error = await response.json()
+                alert("文档删除失败:"+error.message)
+            }
+        }catch(error){
+            alert("文档删除失败"+error.message)
+        }
+    }
+    document.addEventListener("DOMContentLoaded", function () {
+        loadNavigation(false);
+    });
+</script>
+{% endblock %}
