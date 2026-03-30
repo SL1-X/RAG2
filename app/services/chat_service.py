@@ -113,6 +113,7 @@ class ChatService:
         pipeline_mode: str = PIPELINE_MODE_FULL,
         context: str | None = None,
         history=None,
+        settings_override: dict | None = None,
     ):
         return rag_service.ask_stream(
             kb_id=kb_id,
@@ -120,6 +121,7 @@ class ChatService:
             pipeline_mode=pipeline_mode,
             context=context,
             history=history,
+            settings_override=settings_override,
         )
 
 

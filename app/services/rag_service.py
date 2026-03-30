@@ -72,6 +72,64 @@ class RAGService:
         model_name = str(settings.get(f"{prefix}_fallback_model_name", "")).strip()
         return bool(provider and model_name)
 
+    def _should_use_rag_fallback(
+        self, question: str, merged_context: str, settings: dict
+    ) -> bool:
+        """
+        RAG 自动切换策略：
+        - 默认开启（rag_llm_auto_switch_enabled）
+        - 当上下文很长、分段很多、或问题出现图表/表格信号时，优先使用 fallback
+        """
+        if not self._as_bool(settings.get("rag_llm_auto_switch_enabled", True), True):
+            return False
+        if not self._has_role_fallback(settings, "rag"):
+            return False
+
+        primary_provider = str(settings.get("rag_llm_provider", "") or "").strip().lower()
+        fallback_provider = str(
+            settings.get("rag_llm_fallback_provider", "") or ""
+        ).strip().lower()
+        if not primary_provider or not fallback_provider or primary_provider == fallback_provider:
+            return False
+
+        text = str(merged_context or "")
+        context_chars = len(text)
+        context_lines = (text.count("\n") + 1) if text else 0
+        section_count = len(self._split_context_sections(text))
+
+        char_threshold = max(
+            6000, self._as_int(settings.get("rag_llm_auto_switch_chars", 22000), 22000)
+        )
+        line_threshold = max(
+            120, self._as_int(settings.get("rag_llm_auto_switch_lines", 360), 360)
+        )
+        section_threshold = max(
+            4, self._as_int(settings.get("rag_llm_auto_switch_sections", 10), 10)
+        )
+
+        chart_or_table_signal = bool(
+            re.search(
+                r"(图表|表格|曲线|趋势|柱状|折线|饼图|热力图|chart|table|figure|plot|graph|diagram)",
+                f"{question or ''}\n{text[:5000]}",
+                re.IGNORECASE,
+            )
+        )
+        should_switch = (
+            context_chars >= char_threshold
+            or context_lines >= line_threshold
+            or section_count >= section_threshold
+            or chart_or_table_signal
+        )
+        if should_switch:
+            logger.info(
+                "RAG自动切换到fallback: chars=%s lines=%s sections=%s chart_signal=%s",
+                context_chars,
+                context_lines,
+                section_count,
+                chart_or_table_signal,
+            )
+        return should_switch
+
     @staticmethod
     def _doc_uid(doc) -> str:
         meta = doc.metadata or {}
@@ -83,6 +141,16 @@ class RAGService:
 
     def _build_refusal_message(self, question: str = "") -> str:
         return DEFAULT_REFUSAL_ZH if self._contains_cjk(question) else DEFAULT_REFUSAL_EN
+
+    @staticmethod
+    def _merge_settings(settings: dict, settings_override: dict | None = None) -> dict:
+        merged = dict(settings or {})
+        if settings_override:
+            for key, value in settings_override.items():
+                if value is None:
+                    continue
+                merged[key] = value
+        return merged
 
     def _should_rewrite_query(self, question: str, history, settings: dict) -> bool:
         if not history:
@@ -597,6 +665,7 @@ class RAGService:
         self, question: str, context: str, settings: dict, history=None
     ) -> str:
         merged_context = self._merge_context_and_history(context, history)
+        prefer_fallback = self._should_use_rag_fallback(question, merged_context, settings)
         sections = self._split_context_sections(merged_context)
         if not sections:
             return self._build_refusal_message(question)
@@ -642,6 +711,7 @@ class RAGService:
                 temperature=min(
                     self._as_float(settings.get("rag_llm_temperature", 0.7), 0.7), 0.35
                 ),
+                use_fallback=prefer_fallback,
             )
             chain = map_prompt | llm
             out = chain.invoke({"question": question, "section": sec, "idx": idx})
@@ -685,6 +755,7 @@ class RAGService:
             role="rag",
             max_tokens=reduce_max_tokens,
             temperature=min(self._as_float(settings.get("rag_llm_temperature", 0.7), 0.7), 0.35),
+            use_fallback=prefer_fallback,
         )
         chain = reduce_prompt | llm
         out = chain.invoke({"question": question, "partials": "\n\n".join(partial_summaries)})
@@ -704,6 +775,7 @@ class RAGService:
             role="rag",
             max_tokens=retry_max_tokens,
             temperature=min(self._as_float(settings.get("rag_llm_temperature", 0.7), 0.7), 0.35),
+            use_fallback=prefer_fallback,
         )
         retry_prompt = ChatPromptTemplate.from_messages(
             [
@@ -882,6 +954,9 @@ class RAGService:
         if not draft_text:
             return draft_text
         merged_context = self._merge_context_and_history(context, history)
+        effective_fallback = use_fallback or self._should_use_rag_fallback(
+            question, merged_context, settings
+        )
         llm = LLMFactory.create_llm(
             settings,
             role="rag",
@@ -890,7 +965,7 @@ class RAGService:
                 int(self._as_int(settings.get("rag_llm_max_tokens", 1024), 1024) * 1.5),
             ),
             temperature=min(self._as_float(settings.get("rag_llm_temperature", 0.7), 0.7), 0.4),
-            use_fallback=use_fallback,
+            use_fallback=effective_fallback,
         )
         prompt = ChatPromptTemplate.from_messages(
             [
@@ -935,6 +1010,9 @@ class RAGService:
             return text
         target = "Chinese" if self._contains_cjk(question) else "English"
         merged_context = self._merge_context_and_history(context, history)
+        effective_fallback = use_fallback or self._should_use_rag_fallback(
+            question, merged_context, settings
+        )
         llm = LLMFactory.create_llm(
             settings,
             role="rag",
@@ -943,7 +1021,7 @@ class RAGService:
                 self._as_int(settings.get("rag_llm_max_tokens", 1024), 1024),
             ),
             temperature=0.2,
-            use_fallback=use_fallback,
+            use_fallback=effective_fallback,
         )
         prompt = ChatPromptTemplate.from_messages(
             [
@@ -1253,6 +1331,7 @@ class RAGService:
     def _stream_llm_answer(self, question: str, context: str, settings: dict, history=None):
         rag_prompt = self._get_rag_prompt(settings)
         merged_context = self._merge_context_and_history(context, history)
+        prefer_fallback = self._should_use_rag_fallback(question, merged_context, settings)
 
         def _run_stream(use_fallback: bool):
             llm = LLMFactory.create_llm(
@@ -1268,14 +1347,19 @@ class RAGService:
                     yield chunk.content
 
         try:
-            for text in _run_stream(use_fallback=False):
+            for text in _run_stream(use_fallback=prefer_fallback):
                 yield text
         except Exception as e:
-            if not self._has_role_fallback(settings, "rag"):
-                raise
-            logger.warning(f"RAG 主模型流式失败，尝试 fallback: {e}")
-            for text in _run_stream(use_fallback=True):
-                yield text
+            if prefer_fallback:
+                logger.warning(f"RAG fallback 流式失败，尝试主模型: {e}")
+                for text in _run_stream(use_fallback=False):
+                    yield text
+            else:
+                if not self._has_role_fallback(settings, "rag"):
+                    raise
+                logger.warning(f"RAG 主模型流式失败，尝试 fallback: {e}")
+                for text in _run_stream(use_fallback=True):
+                    yield text
 
     def _invoke_rag_answer(
         self, question: str, context: str, settings: dict, history=None
@@ -1320,6 +1404,7 @@ class RAGService:
         self, question: str, context: str, settings: dict, history=None, draft: str = ""
     ) -> str:
         merged_context = self._merge_context_and_history(context, history)
+        prefer_fallback = self._should_use_rag_fallback(question, merged_context, settings)
         llm = LLMFactory.create_llm(
             settings,
             role="rag",
@@ -1335,6 +1420,7 @@ class RAGService:
                 ),
             ),
             temperature=min(self._as_float(settings.get("rag_llm_temperature", 0.7), 0.7), 0.35),
+            use_fallback=prefer_fallback,
         )
         repair_prompt = ChatPromptTemplate.from_messages(
             [
@@ -1372,6 +1458,7 @@ class RAGService:
     ) -> str:
         rag_prompt = self._get_rag_prompt(settings)
         merged_context = self._merge_context_and_history(context, history)
+        prefer_fallback = self._should_use_rag_fallback(question, merged_context, settings)
         max_tokens = self._as_int(settings.get("rag_llm_max_tokens", 1024), 1024)
         temperature = self._as_float(settings.get("rag_llm_temperature", 0.7), 0.7)
 
@@ -1398,6 +1485,16 @@ class RAGService:
                     draft=candidate,
                     use_fallback=use_fallback,
                 )
+            if self._looks_too_brief_answer(question, candidate):
+                logger.warning("RAG 输出疑似过短，尝试自动扩展补全")
+                candidate = self._expand_answer_if_too_brief(
+                    question=question,
+                    context=context,
+                    history=history,
+                    settings=settings,
+                    draft=candidate,
+                    use_fallback=use_fallback,
+                )
             candidate = self._repair_answer_language(
                 question=question,
                 context=context,
@@ -1409,16 +1506,91 @@ class RAGService:
             return candidate
 
         try:
-            out = _invoke_once(use_fallback=False)
+            out = _invoke_once(use_fallback=prefer_fallback)
             text = out.content if getattr(out, "content", None) else str(out)
-            return _postprocess(text, out, use_fallback=False)
+            return _postprocess(text, out, use_fallback=prefer_fallback)
         except Exception as e:
+            if prefer_fallback:
+                logger.warning(f"RAG fallback 调用失败，尝试主模型: {e}")
+                out = _invoke_once(use_fallback=False)
+                text = out.content if getattr(out, "content", None) else str(out)
+                return _postprocess(text, out, use_fallback=False)
             if not self._has_role_fallback(settings, "rag"):
                 raise
             logger.warning(f"RAG 主模型调用失败，尝试 fallback: {e}")
             out = _invoke_once(use_fallback=True)
             text = out.content if getattr(out, "content", None) else str(out)
             return _postprocess(text, out, use_fallback=True)
+
+    @staticmethod
+    def _looks_too_brief_answer(question: str, answer: str) -> bool:
+        q = (question or "").strip()
+        text = (answer or "").strip()
+        if not q or not text:
+            return False
+        if len(q) <= 6:
+            return False
+        # 避免对明确拒答文案触发扩展
+        if text.startswith(DEFAULT_REFUSAL_EN[:24]) or text.startswith(DEFAULT_REFUSAL_ZH[:8]):
+            return False
+        non_empty_lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+        if len(non_empty_lines) <= 1 and len(text) < 260:
+            return True
+        if len(text) < 170:
+            return True
+        return False
+
+    def _expand_answer_if_too_brief(
+        self,
+        *,
+        question: str,
+        context: str,
+        history,
+        settings: dict,
+        draft: str,
+        use_fallback: bool = False,
+    ) -> str:
+        draft_text = (draft or "").strip()
+        if not draft_text:
+            return draft_text
+        merged_context = self._merge_context_and_history(context, history)
+        effective_fallback = use_fallback or self._should_use_rag_fallback(
+            question, merged_context, settings
+        )
+        llm = LLMFactory.create_llm(
+            settings,
+            role="rag",
+            max_tokens=max(
+                1280,
+                int(self._as_int(settings.get("rag_llm_max_tokens", 1024), 1024) * 1.5),
+            ),
+            temperature=min(self._as_float(settings.get("rag_llm_temperature", 0.7), 0.7), 0.4),
+            use_fallback=effective_fallback,
+        )
+        prompt = ChatPromptTemplate.from_messages(
+            [
+                (
+                    "system",
+                    "You improve incomplete grounded answers. "
+                    "Use only the provided document context and keep the same language as the user question. "
+                    "Do not replace the existing draft; keep it and extend it with missing key evidence, details, and constraints. "
+                    "Keep citation markers [^n] for key claims.",
+                ),
+                (
+                    "human",
+                    "Question:\n{question}\n\n"
+                    "Current draft (too brief):\n{draft}\n\n"
+                    "Document context:\n{context}\n\n"
+                    "Return a complete and detailed final answer.",
+                ),
+            ]
+        )
+        chain = prompt | llm
+        out = chain.invoke({"question": question, "draft": draft_text, "context": merged_context})
+        expanded = (out.content if getattr(out, "content", None) else str(out)).strip()
+        if not expanded:
+            return draft_text
+        return expanded
 
     def _run_triple_retrieval_branch(
         self, kb_id: str, question: str, settings: dict, branch: str
@@ -1504,9 +1676,11 @@ class RAGService:
                 "error": str(e),
             }
 
-    def generate_stream(self, question: str, context: str = "", history=None):
+    def generate_stream(
+        self, question: str, context: str = "", history=None, settings: dict | None = None
+    ):
         """仅生成：不访问向量库，用传入的 context 与 question 走 RAG 提示词 + LLM。"""
-        settings = settings_service.get()
+        settings = settings or settings_service.get()
         yield {"type": "start", "content": ""}
         try:
             for text in self._stream_llm_answer(
@@ -1528,9 +1702,15 @@ class RAGService:
             },
         }
 
-    def retrieve_only_stream(self, kb_id, question, retrieval_query: str | None = None):
+    def retrieve_only_stream(
+        self,
+        kb_id,
+        question,
+        retrieval_query: str | None = None,
+        settings: dict | None = None,
+    ):
         """仅检索：不调用大模型，在 done 中返回 sources 与元数据。"""
-        settings = settings_service.get()
+        settings = settings or settings_service.get()
         yield {"type": "start", "content": ""}
         query_for_retrieval = retrieval_query or question
         filtered_docs = self._retrieve_documents(kb_id, query_for_retrieval, settings)
@@ -1558,9 +1738,10 @@ class RAGService:
         retrieval_mode: str | None = None,
         retrieval_query: str | None = None,
         history=None,
+        settings: dict | None = None,
     ):
         """完整 RAG：先检索再生成（原 ask_stream 行为）。"""
-        settings = settings_service.get()
+        settings = settings or settings_service.get()
         pipeline_started = perf_counter()
         yield {"type": "start", "content": ""}
         query_for_retrieval = retrieval_query or question
@@ -1651,7 +1832,12 @@ class RAGService:
         }
 
     def triple_parallel_stream(
-        self, kb_id, question, history=None, retrieval_query: str | None = None
+        self,
+        kb_id,
+        question,
+        history=None,
+        retrieval_query: str | None = None,
+        settings: dict | None = None,
     ):
         """
         两阶段并行：
@@ -1659,7 +1845,7 @@ class RAGService:
         2) 三路检索完成后，三路生成并发执行。
         SSE 按“分支完成顺序”输出 branch_start → content → branch_done。
         """
-        settings = settings_service.get()
+        settings = settings or settings_service.get()
         pipeline_started = perf_counter()
         yield {
             "type": "start",
@@ -1791,12 +1977,13 @@ class RAGService:
         history=None,
         retrieval_query: str | None = None,
         pipeline_mode: str = PIPELINE_MODE_FULL,
+        settings: dict | None = None,
     ):
         """
         单路生成（vector/keyword/hybrid）：
         与 triple_parallel 的分支处理保持一致（检索、生成、grounded gate、summary fallback）。
         """
-        settings = settings_service.get()
+        settings = settings or settings_service.get()
         pipeline_started = perf_counter()
         yield {"type": "start", "content": ""}
 
@@ -1863,6 +2050,7 @@ class RAGService:
         pipeline_mode: str = PIPELINE_MODE_FULL,
         context: str | None = None,
         history=None,
+        settings_override: dict | None = None,
     ):
         """
         统一入口：按 pipeline_mode 分流。
@@ -1870,18 +2058,24 @@ class RAGService:
         - retrieve_only: 仅检索
         - generate_only: 仅生成（使用请求体中的 context，不访问该知识库向量检索）
         """
-        settings = settings_service.get()
+        settings = self._merge_settings(settings_service.get(), settings_override)
         intent = self._classify_intent(question, settings, history)
         logger.info(f"检测到用户意图: {intent}")
 
         if intent == "chitchat":
-            yield from self.generate_stream(question, context="", history=history)
+            yield from self.generate_stream(
+                question, context="", history=history, settings=settings
+            )
             return
 
         if intent == "summary":
             retrieval_query = question
             yield from self.full_rag_stream(
-                kb_id, question, retrieval_query=retrieval_query, history=history
+                kb_id,
+                question,
+                retrieval_query=retrieval_query,
+                history=history,
+                settings=settings,
             )
             return
 
@@ -1891,10 +2085,12 @@ class RAGService:
 
         if pipeline_mode == PIPELINE_MODE_RETRIEVE_ONLY:
             yield from self.retrieve_only_stream(
-                kb_id, question, retrieval_query=retrieval_query
+                kb_id, question, retrieval_query=retrieval_query, settings=settings
             )
         elif pipeline_mode == PIPELINE_MODE_GENERATE_ONLY:
-            yield from self.generate_stream(question, context or "", history=history)
+            yield from self.generate_stream(
+                question, context or "", history=history, settings=settings
+            )
         elif pipeline_mode == PIPELINE_MODE_VECTOR_GENERATE:
             yield from self.single_branch_stream(
                 kb_id,
@@ -1903,6 +2099,7 @@ class RAGService:
                 retrieval_query=retrieval_query,
                 history=history,
                 pipeline_mode=PIPELINE_MODE_VECTOR_GENERATE,
+                settings=settings,
             )
         elif pipeline_mode == PIPELINE_MODE_KEYWORD_GENERATE:
             yield from self.single_branch_stream(
@@ -1912,6 +2109,7 @@ class RAGService:
                 retrieval_query=retrieval_query,
                 history=history,
                 pipeline_mode=PIPELINE_MODE_KEYWORD_GENERATE,
+                settings=settings,
             )
         elif pipeline_mode == PIPELINE_MODE_HYBRID_GENERATE:
             yield from self.single_branch_stream(
@@ -1921,6 +2119,7 @@ class RAGService:
                 retrieval_query=retrieval_query,
                 history=history,
                 pipeline_mode=PIPELINE_MODE_HYBRID_GENERATE,
+                settings=settings,
             )
         elif pipeline_mode == PIPELINE_MODE_TRIPLE_PARALLEL:
             yield from self.triple_parallel_stream(
@@ -1928,10 +2127,15 @@ class RAGService:
                 question,
                 history=history,
                 retrieval_query=retrieval_query,
+                settings=settings,
             )
         else:
             yield from self.full_rag_stream(
-                kb_id, question, retrieval_query=retrieval_query, history=history
+                kb_id,
+                question,
+                retrieval_query=retrieval_query,
+                history=history,
+                settings=settings,
             )
 
     def _extract_citations(self, docs):

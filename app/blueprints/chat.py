@@ -267,6 +267,12 @@ def rag_chat(kb_id):
                 pipeline_mode=pipeline_mode,
                 context=extra_context,
                 history=history,
+                settings_override={
+                    "rag_llm_max_tokens": max_tokens,
+                    # 总结场景的 reduce/repair 阶段同样放宽，减少“只出半段”概率
+                    "summary_reduce_max_tokens": max(1280, max_tokens),
+                    "summary_repair_max_tokens": max(1280, max_tokens),
+                },
             ):
                 ct = chunk.get("type")
                 if ct == "branch_start":

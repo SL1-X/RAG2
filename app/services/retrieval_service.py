@@ -19,6 +19,7 @@ import pickle
 import os
 from app.models.parent_chunk import ParentChunk
 from app.utils.db import db_session
+import atexit
 
 logger = get_logger(__name__)
 
@@ -29,6 +30,16 @@ class RetrievalService:
         self.reranker = None
         self._keyword_index_cache = {}
         self._keyword_cache_lock = threading.Lock()
+        # 复用线程池，避免每次 hybrid_search 都创建/销毁线程池
+        self._hybrid_executor = ThreadPoolExecutor(
+            max_workers=2, thread_name_prefix="retrieval-hybrid"
+        )
+
+    def shutdown(self):
+        executor = getattr(self, "_hybrid_executor", None)
+        if executor is not None:
+            executor.shutdown(wait=False, cancel_futures=False)
+            self._hybrid_executor = None
 
     def _get_settings(self) -> dict:
         # 每次检索都拉取最新设置，避免服务初始化后配置过期
@@ -620,23 +631,22 @@ class RetrievalService:
             "rerank_candidate_k": rerank_candidate_k,
         }
 
-        with ThreadPoolExecutor(max_workers=2) as pool:
-            vector_future = pool.submit(
-                self.vector_search,
-                collection_name=collection_name,
-                query=query,
-                rerank=False,
-                settings=settings,
-            )
-            keyword_future = pool.submit(
-                self.keyword_search,
-                collection_name=collection_name,
-                query=query,
-                rerank=False,
-                settings=settings,
-            )
-            vector_results = vector_future.result()
-            keyword_results = keyword_future.result()
+        vector_future = self._hybrid_executor.submit(
+            self.vector_search,
+            collection_name=collection_name,
+            query=query,
+            rerank=False,
+            settings=settings,
+        )
+        keyword_future = self._hybrid_executor.submit(
+            self.keyword_search,
+            collection_name=collection_name,
+            query=query,
+            rerank=False,
+            settings=settings,
+        )
+        vector_results = vector_future.result()
+        keyword_results = keyword_future.result()
         debug["vector_in"] = len(vector_results)
         debug["keyword_in"] = len(keyword_results)
         # 创建字典用于存储文本及其排名信息
@@ -734,3 +744,4 @@ class RetrievalService:
 
 
 retrieval_service = RetrievalService()
+atexit.register(retrieval_service.shutdown)

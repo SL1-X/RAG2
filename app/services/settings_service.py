@@ -20,26 +20,26 @@ class SettingsService(BaseService[Settings]):
         "rewrite_llm_fallback_model_name": Config.GEMINI_CHAT_MODEL,
         "rewrite_llm_fallback_api_key": Config.GEMINI_API_KEY,
         "rewrite_llm_fallback_base_url": Config.GEMINI_BASE_URL,
-        "rag_llm_provider": "gemini",
-        "rag_llm_model_name": Config.GEMINI_CHAT_MODEL,
-        "rag_llm_api_key": Config.GEMINI_API_KEY,
-        "rag_llm_base_url": Config.GEMINI_BASE_URL,
+        "rag_llm_provider": "deepseek",
+        "rag_llm_model_name": Config.DEEPSEEK_CHAT_MODEL,
+        "rag_llm_api_key": Config.DEEPSEEK_API_KEY,
+        "rag_llm_base_url": Config.DEEPSEEK_BASE_URL,
         "rag_llm_temperature": 0.7,
         "rag_llm_max_tokens": 768,
-        "rag_llm_fallback_provider": "deepseek",
-        "rag_llm_fallback_model_name": Config.DEEPSEEK_CHAT_MODEL,
-        "rag_llm_fallback_api_key": Config.DEEPSEEK_API_KEY,
-        "rag_llm_fallback_base_url": Config.DEEPSEEK_BASE_URL,
-        "chat_llm_provider": "gemini",
-        "chat_llm_model_name": Config.GEMINI_CHAT_MODEL,
-        "chat_llm_api_key": Config.GEMINI_API_KEY,
-        "chat_llm_base_url": Config.GEMINI_BASE_URL,
+        "rag_llm_fallback_provider": "gemini",
+        "rag_llm_fallback_model_name": Config.GEMINI_CHAT_MODEL,
+        "rag_llm_fallback_api_key": Config.GEMINI_API_KEY,
+        "rag_llm_fallback_base_url": Config.GEMINI_BASE_URL,
+        "chat_llm_provider": "deepseek",
+        "chat_llm_model_name": Config.DEEPSEEK_CHAT_MODEL,
+        "chat_llm_api_key": Config.DEEPSEEK_API_KEY,
+        "chat_llm_base_url": Config.DEEPSEEK_BASE_URL,
         "chat_llm_temperature": 0.7,
         "chat_llm_max_tokens": 1024,
-        "chat_llm_fallback_provider": "deepseek",
-        "chat_llm_fallback_model_name": Config.DEEPSEEK_CHAT_MODEL,
-        "chat_llm_fallback_api_key": Config.DEEPSEEK_API_KEY,
-        "chat_llm_fallback_base_url": Config.DEEPSEEK_BASE_URL,
+        "chat_llm_fallback_provider": "gemini",
+        "chat_llm_fallback_model_name": Config.GEMINI_CHAT_MODEL,
+        "chat_llm_fallback_api_key": Config.GEMINI_API_KEY,
+        "chat_llm_fallback_base_url": Config.GEMINI_BASE_URL,
     }
     _MODULE_LLM_NUMERIC_KEYS = {
         "rewrite_llm_temperature",
@@ -58,6 +58,10 @@ class SettingsService(BaseService[Settings]):
         "enable_query_rewrite": True,
         "rewrite_only_when_needed": True,
         "keyword_index_ttl_sec": 300,
+        "rag_llm_auto_switch_enabled": True,
+        "rag_llm_auto_switch_chars": 22000,
+        "rag_llm_auto_switch_lines": 360,
+        "rag_llm_auto_switch_sections": 10,
     }
     _PROMPT_DEFAULTS = {
         "chat_system_prompt": (
@@ -313,6 +317,60 @@ class SettingsService(BaseService[Settings]):
                 self._RETRIEVAL_OVERRIDE_DEFAULTS.get("keyword_index_ttl_sec", 300)
             )
         payload["keyword_index_ttl_sec"] = max(0, min(keyword_index_ttl_sec, 3600))
+
+        payload["rag_llm_auto_switch_enabled"] = self._as_bool(
+            extra.get(
+                "rag_llm_auto_switch_enabled",
+                payload.get(
+                    "rag_llm_auto_switch_enabled",
+                    self._RETRIEVAL_OVERRIDE_DEFAULTS.get("rag_llm_auto_switch_enabled", True),
+                ),
+            ),
+            True,
+        )
+        try:
+            auto_chars = int(
+                extra.get(
+                    "rag_llm_auto_switch_chars",
+                    payload.get(
+                        "rag_llm_auto_switch_chars",
+                        self._RETRIEVAL_OVERRIDE_DEFAULTS.get("rag_llm_auto_switch_chars", 22000),
+                    ),
+                )
+            )
+        except Exception:
+            auto_chars = int(self._RETRIEVAL_OVERRIDE_DEFAULTS.get("rag_llm_auto_switch_chars", 22000))
+        payload["rag_llm_auto_switch_chars"] = max(6000, min(auto_chars, 200000))
+
+        try:
+            auto_lines = int(
+                extra.get(
+                    "rag_llm_auto_switch_lines",
+                    payload.get(
+                        "rag_llm_auto_switch_lines",
+                        self._RETRIEVAL_OVERRIDE_DEFAULTS.get("rag_llm_auto_switch_lines", 360),
+                    ),
+                )
+            )
+        except Exception:
+            auto_lines = int(self._RETRIEVAL_OVERRIDE_DEFAULTS.get("rag_llm_auto_switch_lines", 360))
+        payload["rag_llm_auto_switch_lines"] = max(120, min(auto_lines, 5000))
+
+        try:
+            auto_sections = int(
+                extra.get(
+                    "rag_llm_auto_switch_sections",
+                    payload.get(
+                        "rag_llm_auto_switch_sections",
+                        self._RETRIEVAL_OVERRIDE_DEFAULTS.get("rag_llm_auto_switch_sections", 10),
+                    ),
+                )
+            )
+        except Exception:
+            auto_sections = int(
+                self._RETRIEVAL_OVERRIDE_DEFAULTS.get("rag_llm_auto_switch_sections", 10)
+            )
+        payload["rag_llm_auto_switch_sections"] = max(4, min(auto_sections, 50))
         return payload
 
     def get(self):
@@ -358,10 +416,10 @@ class SettingsService(BaseService[Settings]):
             "embedding_model_name": "sentence-transformers/all-MiniLM-L6-v2",  # 默认 embedding 模型
             "embedding_api_key": "",  # 默认无 embedding API key
             "embedding_base_url": "",  # 默认无 embedding base url
-            "llm_provider": "gemini",  # 默认 LLM provider
-            "llm_model_name": Config.GEMINI_CHAT_MODEL,  # 默认 LLM 模型
-            "llm_api_key": Config.GEMINI_API_KEY,  # 配置里的默认 LLM API key
-            "llm_base_url": Config.GEMINI_BASE_URL,  # 配置里的默认 LLM base url
+            "llm_provider": "deepseek",  # 默认 LLM provider
+            "llm_model_name": Config.DEEPSEEK_CHAT_MODEL,  # 默认 LLM 模型
+            "llm_api_key": Config.DEEPSEEK_API_KEY,  # 配置里的默认 LLM API key
+            "llm_base_url": Config.DEEPSEEK_BASE_URL,  # 配置里的默认 LLM base url
             "llm_temperature": 0.7,  # 默认温度
             "chat_system_prompt": self._PROMPT_DEFAULTS["chat_system_prompt"],  # 聊天系统默认提示词
             "rag_system_prompt": self._PROMPT_DEFAULTS["rag_system_prompt"],  # RAG系统提示词
