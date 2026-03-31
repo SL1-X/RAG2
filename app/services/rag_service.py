@@ -278,7 +278,9 @@ class RAGService:
         rag_query_prompt = (settings.get("rag_query_prompt") or "").strip()
         rag_query_guard = (
             "Final output language rule: answer in the same language as the user question. "
-            "Do not force Chinese."
+            "Do not force Chinese. "
+            "If you output a list, use numbered format like '1. 2. 3.' instead of bullets. "
+            "Prefer highlighting each key point title with markdown bold (e.g., **Key Point**: details)."
         )
         rag_query_prompt = (
             f"{rag_query_prompt}\n\n{rag_query_guard}" if rag_query_prompt else rag_query_guard
@@ -637,6 +639,122 @@ class RAGService:
         # 标点前后重复：[^1]. [^1] -> [^1].
         text = re.sub(r"(\[\^\d+\])\s*([。！？.!?;,，；:：])\s*\1", r"\1\2", text)
         return text
+
+    @staticmethod
+    def _auto_number_markdown_bullets(answer: str) -> str:
+        """
+        将 Markdown 无序列表自动转为有序编号列表。
+        - 顶层列表：1. 2. 3. ...
+        - 二级列表：1.1 1.2 ...
+        仅处理前两级，避免过度改写复杂嵌套结构。
+        """
+        text = str(answer or "")
+        if not text:
+            return text
+        lines = text.splitlines(keepends=True)
+        out = []
+        level1 = 0
+        level2 = 0
+        bullet_pat = re.compile(r"^(\s*)([*\-+•])\s+(.+?)\s*$")
+        for line in lines:
+            no_newline = line.rstrip("\r\n")
+            newline = line[len(no_newline) :]
+            m = bullet_pat.match(no_newline)
+            if m:
+                indent = m.group(1)
+                indent_len = len(indent.replace("\t", "    "))
+                content = m.group(3).strip()
+                if indent_len <= 3:
+                    level1 += 1
+                    level2 = 0
+                    out.append(f"{indent}{level1}. {content}{newline}")
+                    continue
+                if indent_len <= 7 and level1 > 0:
+                    level2 += 1
+                    out.append(f"{indent}{level1}.{level2} {content}{newline}")
+                    continue
+                out.append(line)
+                continue
+            if no_newline.strip():
+                level2 = 0
+            out.append(line)
+        return "".join(out)
+
+    @staticmethod
+    def _auto_bold_key_phrases(answer: str) -> str:
+        """
+        自动加粗条目中的“关键词前缀”，提升可读性。
+        规则示例：
+        - `1. 功能定位：xxx` -> `1. **功能定位**：xxx`
+        - `2.1 Core idea: xxx` -> `2.1 **Core idea**: xxx`
+        """
+        text = str(answer or "")
+        if not text:
+            return text
+        lines = text.splitlines(keepends=True)
+        out = []
+        item_pat = re.compile(r"^(\s*\d+(?:\.\d+)?\.?\s+)(.+?)\s*$")
+        for line in lines:
+            no_newline = line.rstrip("\r\n")
+            newline = line[len(no_newline) :]
+            stripped = no_newline.strip()
+            if not stripped or stripped.startswith("```"):
+                out.append(line)
+                continue
+            m = item_pat.match(no_newline)
+            if not m:
+                out.append(line)
+                continue
+            prefix = m.group(1)
+            body = m.group(2).strip()
+            if body.startswith("**"):
+                out.append(line)
+                continue
+            cut = -1
+            sep = ""
+            for candidate in ("：", ":", " - ", " — "):
+                idx = body.find(candidate)
+                if idx > 1:
+                    cut = idx
+                    sep = candidate
+                    break
+            if cut == -1:
+                # 无显式分隔符时，尝试把前导短语加粗（例如 "1. Accuracy [^1]"）
+                m_simple = re.match(r"^([A-Za-z][A-Za-z0-9 \-]{1,28}|[\u4e00-\u9fff]{2,14})\s*(.*)$", body)
+                if not m_simple:
+                    out.append(line)
+                    continue
+                key = m_simple.group(1).strip()
+                rest = m_simple.group(2)
+                if not key or "[^" in key or "**" in key:
+                    out.append(line)
+                    continue
+                out.append(f"{prefix}**{key}** {rest.lstrip()}{newline}")
+                continue
+            key = body[:cut].strip()
+            rest = body[cut + len(sep) :].lstrip()
+            if len(key) < 2 or len(key) > 36 or "[^" in key or "**" in key:
+                out.append(line)
+                continue
+            out.append(f"{prefix}**{key}**{sep}{rest}{newline}")
+        return "".join(out)
+
+    def _format_answer_for_display(self, answer: str) -> str:
+        text = self._auto_number_markdown_bullets(answer)
+        text = self._auto_bold_key_phrases(text)
+        return text
+
+    @staticmethod
+    def _answer_output_payload(
+        answer_with_citations: str = "",
+        citation_map: list | None = None,
+        grounding_reason: str = "",
+    ) -> dict:
+        return {
+            "answer_with_citations": answer_with_citations or "",
+            "citation_map": citation_map or [],
+            "grounding_reason": grounding_reason or "",
+        }
 
     @staticmethod
     def _split_context_sections(context: str) -> list[tuple[int, str]]:
@@ -1203,10 +1321,14 @@ class RAGService:
             ):
                 unsupported += 1
         if checked == 0:
-            return raw_answer, [], "no_checkable_sentence_but_yielded"
+            return (self._format_answer_for_display(raw_answer), [], "no_checkable_sentence_but_yielded")
         if not summary_mode and unsupported > 0:
             logger.warning(f"发现 {unsupported} 句未能严格匹配，依然放行")
-            return cited_answer, citation_map, f"unsupported_{unsupported}_but_yielded"
+            return (
+                self._format_answer_for_display(cited_answer),
+                citation_map,
+                f"unsupported_{unsupported}_but_yielded",
+            )
         if summary_mode:
             # 总结场景更关注“整体可追溯”，放宽到“多数要点有依据”即可通过
             # 1) 短回答（<=2个可检句）允许 1 句不完全匹配；
@@ -1225,7 +1347,7 @@ class RAGService:
                         [],
                         f"unsupported_ratio={unsupported}/{checked}",
                     )
-        return cited_answer, citation_map, "ok"
+        return self._format_answer_for_display(cited_answer), citation_map, "ok"
 
     def _rewrite_query_from_history(
         self, question: str, history, settings: dict
@@ -1681,16 +1803,21 @@ class RAGService:
     ):
         """仅生成：不访问向量库，用传入的 context 与 question 走 RAG 提示词 + LLM。"""
         settings = settings or settings_service.get()
+        pipeline_started = perf_counter()
         yield {"type": "start", "content": ""}
+        full_answer = ""
         try:
             for text in self._stream_llm_answer(
                 question, context, settings, history=history
             ):
+                full_answer += text
                 yield {"type": "content", "content": text}
         except Exception as e:
             logger.error(f"RAG 生成阶段出错: {e}")
             yield {"type": "error", "content": str(e)}
             return
+        final_answer = self._format_answer_for_display(full_answer)
+        elapsed_ms = int((perf_counter() - pipeline_started) * 1000)
         yield {
             "type": "done",
             "content": "",
@@ -1699,6 +1826,14 @@ class RAGService:
                 "question": question,
                 "pipeline_mode": PIPELINE_MODE_GENERATE_ONLY,
                 "context_chars": len(context or ""),
+                "pipeline_elapsed_ms": elapsed_ms,
+                "retrieval_elapsed_ms": 0,
+                "generation_elapsed_ms": elapsed_ms,
+                **self._answer_output_payload(
+                    answer_with_citations=final_answer,
+                    citation_map=[],
+                    grounding_reason="generate_only",
+                ),
             },
         }
 
@@ -1711,11 +1846,15 @@ class RAGService:
     ):
         """仅检索：不调用大模型，在 done 中返回 sources 与元数据。"""
         settings = settings or settings_service.get()
+        pipeline_started = perf_counter()
         yield {"type": "start", "content": ""}
         query_for_retrieval = retrieval_query or question
+        retrieval_started = perf_counter()
         filtered_docs = self._retrieve_documents(kb_id, query_for_retrieval, settings)
+        retrieval_elapsed_ms = int((perf_counter() - retrieval_started) * 1000)
         sources = self._extract_citations(filtered_docs)
         retrieval_debug = self._extract_retrieval_debug(filtered_docs)
+        pipeline_elapsed_ms = int((perf_counter() - pipeline_started) * 1000)
         yield {
             "type": "done",
             "content": "",
@@ -1727,7 +1866,15 @@ class RAGService:
                 "retrieved_chunks": len(filtered_docs),
                 "retrieval_debug": retrieval_debug,
                 "pipeline_mode": PIPELINE_MODE_RETRIEVE_ONLY,
+                "pipeline_elapsed_ms": pipeline_elapsed_ms,
+                "retrieval_elapsed_ms": retrieval_elapsed_ms,
+                "generation_elapsed_ms": 0,
                 "hint": "仅检索模式：未调用大模型。",
+                **self._answer_output_payload(
+                    answer_with_citations="",
+                    citation_map=[],
+                    grounding_reason="retrieve_only",
+                ),
             },
         }
 
@@ -1801,9 +1948,10 @@ class RAGService:
                 fallback_answer, sources
             )
             if fallback_map:
-                cited_answer = fallback_answer
+                cited_answer = self._format_answer_for_display(fallback_answer)
                 citation_map = fallback_map
                 grounding_reason = "ok_summary_fallback"
+        cited_answer = self._format_answer_for_display(cited_answer)
         if grounding_reason not in {"ok", "ok_summary_fallback"}:
             logger.warning(f"RAG grounded gate 触发拒答: {grounding_reason}")
         retrieval_debug = self._extract_retrieval_debug(filtered_docs)
@@ -1823,9 +1971,11 @@ class RAGService:
                 "pipeline_elapsed_ms": pipeline_elapsed_ms,
                 "retrieval_elapsed_ms": retrieval_elapsed_ms,
                 "generation_elapsed_ms": generation_elapsed_ms,
-                "answer_with_citations": cited_answer,
-                "citation_map": citation_map,
-                "grounding_reason": grounding_reason,
+                **self._answer_output_payload(
+                    answer_with_citations=cited_answer,
+                    citation_map=citation_map,
+                    grounding_reason=grounding_reason,
+                ),
                 "retrieval_mode": retrieval_mode
                 or settings.get("retrieval_mode", "vector"),
             },
@@ -1900,9 +2050,10 @@ class RAGService:
                     fallback_answer, sources
                 )
                 if fallback_map:
-                    cited_answer = fallback_answer
+                    cited_answer = self._format_answer_for_display(fallback_answer)
                     citation_map = fallback_map
                     grounding_reason = "ok_summary_fallback"
+            cited_answer = self._format_answer_for_display(cited_answer)
             if grounding_reason not in {"ok", "ok_summary_fallback"}:
                 logger.warning(
                     "triple_parallel 分支 %s grounded gate 触发拒答: %s",
@@ -1922,9 +2073,6 @@ class RAGService:
                     "question": question,
                     "retrieval_query": retrieval_query or question,
                     "retrieval_mode": branch,
-                    "answer_with_citations": cited_answer,
-                    "citation_map": citation_map,
-                    "grounding_reason": grounding_reason,
                     "retrieved_chunks": retrieval_result.get("retrieved_chunks", 0),
                     "retrieval_debug": retrieval_result.get("retrieval_debug"),
                     "retrieval_elapsed_ms": retrieval_result.get(
@@ -1935,6 +2083,11 @@ class RAGService:
                         "retrieval_elapsed_ms", 0
                     )
                     + result.get("generation_elapsed_ms", 0),
+                    **self._answer_output_payload(
+                        answer_with_citations=cited_answer,
+                        citation_map=citation_map,
+                        grounding_reason=grounding_reason,
+                    ),
                 },
             }
 
@@ -1965,6 +2118,11 @@ class RAGService:
                 "pipeline_mode": PIPELINE_MODE_TRIPLE_PARALLEL,
                 "pipeline_elapsed_ms": int((perf_counter() - pipeline_started) * 1000),
                 "triple": triple_payload,
+                **self._answer_output_payload(
+                    answer_with_citations="",
+                    citation_map=[],
+                    grounding_reason="triple_parallel",
+                ),
             },
         }
 
@@ -2011,9 +2169,10 @@ class RAGService:
                 fallback_answer, sources
             )
             if fallback_map:
-                cited_answer = fallback_answer
+                cited_answer = self._format_answer_for_display(fallback_answer)
                 citation_map = fallback_map
                 grounding_reason = "ok_summary_fallback"
+        cited_answer = self._format_answer_for_display(cited_answer)
         if grounding_reason not in {"ok", "ok_summary_fallback"}:
             logger.warning("single_branch %s grounded gate 触发拒答: %s", branch, grounding_reason)
 
@@ -2032,9 +2191,11 @@ class RAGService:
                 "retrieval_mode": branch,
                 "retrieved_chunks": retrieval_result.get("retrieved_chunks", 0),
                 "retrieval_debug": retrieval_result.get("retrieval_debug"),
-                "answer_with_citations": cited_answer,
-                "citation_map": citation_map,
-                "grounding_reason": grounding_reason,
+                **self._answer_output_payload(
+                    answer_with_citations=cited_answer,
+                    citation_map=citation_map,
+                    grounding_reason=grounding_reason,
+                ),
                 "retrieval_elapsed_ms": retrieval_elapsed_ms,
                 "generation_elapsed_ms": generation_elapsed_ms,
                 "pipeline_elapsed_ms": pipeline_elapsed_ms,
@@ -2062,22 +2223,25 @@ class RAGService:
         intent = self._classify_intent(question, settings, history)
         logger.info(f"检测到用户意图: {intent}")
 
-        if intent == "chitchat":
-            yield from self.generate_stream(
-                question, context="", history=history, settings=settings
-            )
-            return
+        # 用户显式选择某种 pipeline_mode 时，应严格按所选模式执行。
+        # 仅在 full 模式下允许意图分类做“闲聊/总结”兜底分流。
+        if pipeline_mode == PIPELINE_MODE_FULL:
+            if intent == "chitchat":
+                yield from self.generate_stream(
+                    question, context="", history=history, settings=settings
+                )
+                return
 
-        if intent == "summary":
-            retrieval_query = question
-            yield from self.full_rag_stream(
-                kb_id,
-                question,
-                retrieval_query=retrieval_query,
-                history=history,
-                settings=settings,
-            )
-            return
+            if intent == "summary":
+                retrieval_query = question
+                yield from self.full_rag_stream(
+                    kb_id,
+                    question,
+                    retrieval_query=retrieval_query,
+                    history=history,
+                    settings=settings,
+                )
+                return
 
         expanded_queries = self._expand_query_for_retrieval(question, settings)
         logger.info(f"原问题: {question} -> 扩写查询: {expanded_queries}")

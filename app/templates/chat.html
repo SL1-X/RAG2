@@ -405,6 +405,25 @@
         white-space: pre-wrap;
         word-break: break-word;
         line-height: 1.68;
+        min-height: 1.68em;
+    }
+    .streaming-loading-dots {
+        display: none;
+        width: 1.6em;
+        vertical-align: baseline;
+        margin-left: 0.04em;
+    }
+    .streaming-loading-dots::after {
+        content: "...";
+        display: inline-block;
+        letter-spacing: 0.12em;
+        animation: chatLoadingPulse 1s ease-in-out infinite;
+    }
+    .streaming-content.streaming-loading .streaming-loading-dots {
+        display: inline-block;
+    }
+    .streaming-content.streaming-loading .streaming-cursor {
+        visibility: hidden;
     }
     .streaming-cursor {
         display: inline-block;
@@ -413,6 +432,15 @@
         border-left: 2px solid #334155;
         vertical-align: -0.08em;
         animation: chatCursorBlink 1s steps(1, end) infinite;
+    }
+    @keyframes chatLoadingPulse {
+        0%,
+        100% {
+            opacity: 0.35;
+        }
+        50% {
+            opacity: 1;
+        }
     }
     @keyframes chatCursorBlink {
         50% {
@@ -861,7 +889,7 @@
                 >
                     <i class="bi bi-chevron-double-left" aria-hidden="true"></i>
                 </button>
-                <button class="btn btn-sm btn-primary" type="button" onclick="createNewSession()" title="New session">
+                <button class="btn btn-sm btn-primary" type="button" id="newSessionBtn" onclick="createNewSession()" title="New session">
                     <i class="bi bi-plus-lg"></i>
                 </button>
                 <button class="btn btn-sm btn-outline-danger" type="button" onclick="clearAllSessions()" title="Clear all sessions">
@@ -1209,7 +1237,7 @@
         let wrap = element.querySelector(".streaming-content");
         if (!wrap) {
             element.innerHTML =
-                '<div class="streaming-content"><span class="streaming-text"></span><span class="streaming-cursor" aria-hidden="true"></span></div>';
+                '<div class="streaming-content"><span class="streaming-text"></span><span class="streaming-loading-dots" aria-hidden="true"></span><span class="streaming-cursor" aria-hidden="true"></span></div>';
             wrap = element.querySelector(".streaming-content");
         }
         return {
@@ -1217,21 +1245,47 @@
             textNode: wrap?.querySelector(".streaming-text"),
         };
     }
+    function renderLoadingStateToElement(element, text) {
+        const nodes = ensureStreamingNodes(element);
+        if (!nodes?.wrap || !nodes?.textNode) return;
+        nodes.wrap.classList.add("streaming-loading");
+        nodes.textNode.textContent = text || "";
+    }
+    function clearLoadingStateFromElement(element) {
+        const wrap = element?.querySelector(".streaming-content");
+        if (!wrap) return;
+        wrap.classList.remove("streaming-loading");
+    }
     function renderStreamingTextToElement(element, text) {
         const nodes = ensureStreamingNodes(element);
-        if (!nodes?.textNode) return;
+        if (!nodes?.textNode || !nodes?.wrap) return;
+        nodes.wrap.classList.remove("streaming-loading");
         nodes.textNode.textContent = text || "";
     }
     // 用于格式化时间字符串为友好显示
     function formatTime(timeStr) {
         // 如果无有效时间，直接返回空字符串
         if (!timeStr) return "";
+        // 后端常返回无时区的UTC时间字符串（如 "2026-03-31 06:53:57"），这里显式按UTC解析
+        let normalizedTime = timeStr;
+        if (typeof timeStr === "string") {
+            const raw = timeStr.trim();
+            if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?$/.test(raw)) {
+                normalizedTime = `${raw.replace(" ", "T")}Z`;
+            } else if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?$/.test(raw)) {
+                normalizedTime = `${raw}Z`;
+            } else {
+                normalizedTime = raw;
+            }
+        }
         // 将字符串转换为Date对象
-        const date = new Date(timeStr);
+        const date = new Date(normalizedTime);
+        if (Number.isNaN(date.getTime())) return "";
         // 获取当前时间
         const now = new Date();
         // 计算时间差（毫秒）
         const diff = now - date;
+        if (diff < 0) return "Just now";
         // 换算为分钟数
         const minutes = Math.floor(diff / 60000);
         // 换算为小时数
@@ -1637,7 +1691,12 @@
             alert("Failed to load session list: " + error.message);
         }
     }
+    let creatingSession = false;
     async function createNewSession() {
+        if (creatingSession) return;
+        creatingSession = true;
+        const newSessionBtn = document.getElementById("newSessionBtn");
+        if (newSessionBtn) newSessionBtn.disabled = true;
         try {
             const response = await fetch("/api/v1/sessions", {
                 method: "POST",
@@ -1647,14 +1706,14 @@
             const result = await response.json();
             //如果返回状态码为200,说明创建会话成功,切换到新的会话
             if (result.code == 200) {
-                currentSessionId = result.data.id;
-                //重新加载最新的Session list
-                await loadSessions();
-                //清空聊天消息
-                //clearChatMessages()
+                const newSessionId = result.data.id;
+                await loadSession(newSessionId);
             }
         } catch (error) {
             alert("Failed to create session:" + error.message);
+        } finally {
+            creatingSession = false;
+            if (newSessionBtn) newSessionBtn.disabled = false;
         }
     }
 
@@ -1708,6 +1767,16 @@
         let tripleRefs = null;
         const branchAnswers = { vector: "", keyword: "", hybrid: "" };
         let tripleRenderPending = false;
+        let hasSingleContentOutput = false;
+        let singleLoadingStage = "";
+        let generationStageShown = false;
+
+        function setSingleLoadingStage(stage) {
+            if (tripleMode || hasSingleContentOutput) return;
+            if (singleLoadingStage === stage) return;
+            singleLoadingStage = stage;
+            renderLoadingStateToElement(answerContent, stage === "retrieval" ? "Retrieving" : "Generating");
+        }
 
         function tripleGridHtml() {
             const cols = [
@@ -1725,7 +1794,7 @@
                     </div>
                     <div class="markdown-content answer-triple-md">
                         <div class="streaming-content">
-                            <span class="streaming-text"></span><span class="streaming-cursor" aria-hidden="true"></span>
+                            <span class="streaming-text"></span><span class="streaming-loading-dots" aria-hidden="true"></span><span class="streaming-cursor" aria-hidden="true"></span>
                         </div>
                     </div>
                     <div class="answer-triple-src-wrap"></div>
@@ -1750,6 +1819,34 @@
         function updateTripleMeta(branch, metadata) {
             if (!tripleRefs || !tripleRefs[branch] || !tripleRefs[branch].meta) return;
             tripleRefs[branch].meta.textContent = buildTripleMetaText(metadata);
+        }
+        function scheduleTripleRender() {
+            if (tripleRenderPending) return;
+            tripleRenderPending = true;
+            requestAnimationFrame(() => {
+                tripleRenderPending = false;
+                if (!tripleRefs) return;
+                ["vector", "keyword", "hybrid"].forEach((b) => {
+                    if (tripleRefs[b] && tripleRefs[b].md) {
+                        renderStreamingTextToElement(tripleRefs[b].md, branchAnswers[b]);
+                    }
+                });
+                scrollToBottom();
+            });
+        }
+
+        function scheduleRender() {
+            //如果当前无待渲染的任务才会进行渲染
+            //这其实就是一个节流的函数
+            if (!pendingUpdate) {
+                pendingUpdate = true;
+                //在下一帧渲染
+                requestAnimationFrame(() => {
+                    renderStreamingTextToElement(answerContent, fullAnswer);
+                    pendingUpdate = false;
+                    scrollToBottom();
+                });
+            }
         }
 
         function fmtMetric(value, isPercent = true) {
@@ -1873,34 +1970,6 @@
             });
         }
 
-        function scheduleTripleRender() {
-            if (tripleRenderPending) return;
-            tripleRenderPending = true;
-            requestAnimationFrame(() => {
-                tripleRenderPending = false;
-                if (!tripleRefs) return;
-                ["vector", "keyword", "hybrid"].forEach((b) => {
-                    if (tripleRefs[b] && tripleRefs[b].md) {
-                        renderStreamingTextToElement(tripleRefs[b].md, branchAnswers[b]);
-                    }
-                });
-                scrollToBottom();
-            });
-        }
-
-        function scheduleRender() {
-            //如果当前无待渲染的任务才会进行渲染
-            //这其实就是一个节流的函数
-            if (!pendingUpdate) {
-                pendingUpdate = true;
-                //在下一帧渲染
-                requestAnimationFrame(() => {
-                    renderStreamingTextToElement(answerContent, fullAnswer);
-                    pendingUpdate = false;
-                    scrollToBottom();
-                });
-            }
-        }
         document.getElementById("questionInput").value = "";
         scrollToBottom();
 
@@ -1965,6 +2034,9 @@
                         //如果类型为开始，为流的开始，要清空内容
                         if (chunk.type == "start") {
                             fullAnswer = "";
+                            hasSingleContentOutput = false;
+                            singleLoadingStage = "";
+                            generationStageShown = false;
                             if (chunk.metadata?.pipeline_mode === "triple_parallel") {
                                 tripleMode = true;
                                 applySingleModeBadge(modeBadgeEl, { pipeline_mode: "triple_parallel" });
@@ -1974,6 +2046,11 @@
                                 answerContent.className = "answer-triple-grid mt-2";
                                 answerContent.innerHTML = tripleGridHtml();
                                 tripleRefs = wireTripleRefs();
+                                ["vector", "keyword", "hybrid"].forEach((b) => {
+                                    if (tripleRefs?.[b]?.md) {
+                                        renderLoadingStateToElement(tripleRefs[b].md, "Retrieving");
+                                    }
+                                });
                             } else {
                                 tripleMode = false;
                                 applySingleModeBadge(modeBadgeEl, {
@@ -1982,9 +2059,13 @@
                                 tripleRefs = null;
                                 answerContent.className = "markdown-content";
                                 answerContent.innerHTML =
-                                    '<div class="streaming-content"><span class="streaming-text"></span><span class="streaming-cursor" aria-hidden="true"></span></div>';
+                                    '<div class="streaming-content"><span class="streaming-text"></span><span class="streaming-loading-dots" aria-hidden="true"></span><span class="streaming-cursor" aria-hidden="true"></span></div>';
+                                setSingleLoadingStage(currentKbId ? "retrieval" : "generation");
                             }
                         } else if (chunk.type == "branch_start") {
+                            if (tripleRefs?.[chunk.branch]?.md) {
+                                renderLoadingStateToElement(tripleRefs[chunk.branch].md, "Generating");
+                            }
                             if (!tripleMode) {
                                 const labels = {
                                     vector: "Vector Retrieval",
@@ -1999,6 +2080,14 @@
                                 branchAnswers[chunk.branch] = (branchAnswers[chunk.branch] || "") + chunk.content;
                                 scheduleTripleRender();
                             } else {
+                                if (!hasSingleContentOutput) {
+                                    if (currentKbId && !generationStageShown) {
+                                        generationStageShown = true;
+                                        setSingleLoadingStage("generation");
+                                    }
+                                    hasSingleContentOutput = true;
+                                    clearLoadingStateFromElement(answerContent);
+                                }
                                 fullAnswer += chunk.content;
                                 scheduleRender();
                             }
